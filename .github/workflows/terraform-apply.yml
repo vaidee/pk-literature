@@ -1,0 +1,101 @@
+name: Deploy
+
+# spec-12-cicd.md — merge-to-main pipeline: dev and qa promote
+# automatically on green; prod always requires a human approval via the
+# `environment: prod` GitHub Environment protection rule (configured in
+# repo settings — Settings > Environments > prod > required reviewers,
+# not something this file can express on its own).
+#
+# App deploy steps (OpenNext / Lambda / ECS) are TODOs — Phase 0 has no
+# application code yet. Each phase adds its own deploy step here in its
+# own PR when it adds the corresponding app.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/modules/**"
+      - "terraform/environments/**"
+      # TODO(phase-1+): add apps/**, packages/** once application code exists
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_DEV }}
+          aws-region: ap-south-1
+      - working-directory: terraform/environments/dev
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+      # TODO(phase-1+): deploy OpenNext / Lambdas / ECS here, per SPEC-12
+
+  smoke-test-dev:
+    needs: apply-dev
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO(phase-1+) — no application endpoints exist yet to smoke-test. This job is a placeholder so the pipeline shape (development/testing.md's E2E layer) is already wired for when apps/web + a Lambda exist."
+
+  apply-qa:
+    needs: smoke-test-dev
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_QA }}
+          aws-region: ap-south-1
+      - working-directory: terraform/environments/qa
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+
+  smoke-test-qa:
+    needs: apply-qa
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO(phase-1+) — see smoke-test-dev."
+
+  apply-prod:
+    needs: smoke-test-qa
+    runs-on: ubuntu-latest
+    # `environment: prod` is what actually enforces the manual approval
+    # gate — configure required reviewers on this Environment in repo
+    # Settings before the first real prod deploy. Without that
+    # configuration this job runs automatically like dev/qa, which is
+    # NOT the intended behavior for prod.
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: ap-south-1
+      - working-directory: terraform/environments/prod
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+
+  smoke-test-prod:
+    needs: apply-prod
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO(phase-1+) — see smoke-test-dev."
