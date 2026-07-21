@@ -1,2 +1,0 @@
-# Rollback
-Operational runbook.

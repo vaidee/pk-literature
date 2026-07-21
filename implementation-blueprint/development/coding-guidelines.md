@@ -1,2 +1,0 @@
-# Coding Guidelines
-Development practices.

@@ -1,2 +1,0 @@
-# Publisher Onboarding
-Operational runbook.

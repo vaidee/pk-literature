@@ -1,2 +1,0 @@
-# Deploy
-Operational runbook.

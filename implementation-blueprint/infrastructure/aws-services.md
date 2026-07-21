@@ -1,2 +1,0 @@
-# Aws Services
-Infrastructure guidance.

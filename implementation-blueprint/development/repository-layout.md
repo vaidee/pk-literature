@@ -1,2 +1,0 @@
-# Repository Layout
-Development practices.

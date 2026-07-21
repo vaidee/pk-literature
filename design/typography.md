@@ -1,2 +1,0 @@
-# Typography
-Heading/body scale.

@@ -1,2 +1,0 @@
-# Erd
-Project database documentation.

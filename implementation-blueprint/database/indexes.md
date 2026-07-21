@@ -1,2 +1,0 @@
-# Indexes
-Project database documentation.

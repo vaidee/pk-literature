@@ -1,2 +1,0 @@
-# Naming
-Project database documentation.

@@ -1,3 +1,0 @@
--- catalog schema
-CREATE SCHEMA catalog;
--- books, authors, publishers...

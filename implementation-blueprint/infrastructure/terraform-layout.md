@@ -1,2 +1,0 @@
-# Terraform Layout
-Infrastructure guidance.
