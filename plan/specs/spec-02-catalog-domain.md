@@ -53,18 +53,51 @@ Does Not Own:
 
 # Aggregate Roots
 
-## Book
+> **Schema note (v2, see SPEC-15):** the data model below has been
+> superseded by a Work/Book split. `Book` here becomes a specific
+> purchasable **edition** (isbn13-bearing, one row per printing/
+> translation); a new `Work` aggregate root represents the abstract
+> literary work and owns the original author(s), themes, genres, and
+> literary movement relationships (they describe the content, so a
+> translation inherits them automatically instead of being re-tagged).
+> `Book.editions` (a self-referential list) is replaced by `Work → many
+> Books`. See `plan/specs/spec-15-data-model.md` and
+> `plan/database/ddl/catalog.sql` for the authoritative shape.
 
-Core entity representing a published work.
+## Work
+
+Abstract literary work, independent of language or printing.
 
 Key attributes:
 
 -   id
+-   canonical_title
+-   original_language
+-   work_type
+-   summary
+-   status
+
+Relationships:
+
+-   authors (original author(s))
+-   themes
+-   genres
+-   literary_movements
+-   books (one or more editions/translations)
+
+## Book
+
+A specific purchasable edition, translation, or printing of a Work.
+
+Key attributes:
+
+-   id
+-   work_id
 -   isbn13
 -   title
 -   subtitle
 -   language
--   edition
+-   edition_label
 -   publication_date
 -   format
 -   page_count
@@ -72,13 +105,11 @@ Key attributes:
 
 Relationships:
 
--   authors
+-   work
+-   contributors (translator/illustrator/editor of this edition)
 -   publisher
--   themes
--   genres
 -   collections
 -   inventory
--   editions
 
 ------------------------------------------------------------------------
 
@@ -211,6 +242,16 @@ Import sources:
 
 # API Surface
 
+The Catalog API is **read-only**. All writes to the `catalog` schema
+happen directly from Directus (manual creation/editing, and promoting
+an approved staging row) — see SPEC-03. The Catalog Lambda service
+never accepts a write; this is deliberate, not an omission, since every
+write must pass through the editorial approval gate one way or another.
+
+GET /works
+
+GET /works/{id}
+
 GET /books
 
 GET /books/{id}
@@ -264,23 +305,24 @@ Consumed:
 # Business Rules
 
 1.  Every book belongs to exactly one publisher.
-2.  A book can have multiple authors.
+2.  A work can have multiple authors; a book can have multiple edition-specific contributors (translator, illustrator, editor).
 3.  A book can belong to multiple collections.
-4.  Inventory updates never overwrite editorial metadata.
+4.  Inventory updates never overwrite editorial metadata (enforced by keeping inventory a separate table).
 5.  Publisher imports cannot publish directly.
 6.  Every change is auditable.
+7.  A translation shares its work's themes/genres/literary movements unless an editor overrides them at the work level; themes are not re-tagged per edition.
 
 ------------------------------------------------------------------------
 
 # Future Extensions
 
--   Multiple editions
--   Translations
 -   Audiobooks
 -   eBooks
 -   Tamil Literature Graph
 -   AI generated summaries
 -   Semantic embeddings
+
+(Multiple editions and translations are no longer "future" — see the Work/Book model above, implemented as of SPEC-15 v2.)
 
 ------------------------------------------------------------------------
 
