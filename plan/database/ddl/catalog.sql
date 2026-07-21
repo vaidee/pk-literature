@@ -52,6 +52,13 @@ CREATE TABLE catalog.publishers (
   logo_asset_id    uuid,                            -- FK added after media_assets defined
   adapter_type     catalog.publisher_adapter_type NOT NULL DEFAULT 'manual',
   active           boolean NOT NULL DEFAULT true,
+  -- Incremental import cursor (SPEC-04 §21). Opaque, adapter-defined
+  -- format (last page token / timestamp / source id — whatever that
+  -- publisher's pagination needs). Read by the external adapter runner
+  -- via the staging-ingest API before a run, written back on successful
+  -- completion — see ADR-009 and staging.sql import_runs.
+  last_import_cursor text,
+  last_import_at      timestamptz,
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT publishers_code_unique UNIQUE (code)

@@ -13,7 +13,6 @@
 |--------------------------------------|----------|---------|
 | `/<env>/rds/master`                    | RDS master username/password (rotated automatically, 30-day) | Terraform (bootstrap only) — app services use RDS Proxy IAM auth, not this secret |
 | `/<env>/razorpay/*`                      | API key + secret, webhook signing secret | `lambda-api-commerce`, `ecs-medusa` |
-| `/<env>/publishers/<code>/*`               | Per-publisher adapter credentials (API tokens, Basic Auth) | `lambda-api-publisher-import` (scoped per publisher via IAM condition on the path) |
 | `/<env>/directus/*`                        | Admin bootstrap credentials, DB connection secret, session secret | `ecs-directus` |
 | `/<env>/medusa/*`                            | Admin bootstrap credentials, DB connection secret, JWT/cookie secrets | `ecs-medusa` |
 
@@ -30,9 +29,12 @@
 - Razorpay webhook signature verification (SPEC-06/SPEC-13) reads the
   signing secret from Secrets Manager on every webhook call — never
   cached beyond the Lambda execution environment's lifetime.
-- Per-publisher adapter credentials are scoped so one publisher's
-  adapter Lambda invocation cannot read another publisher's secret
-  (IAM policy condition on the `/publishers/<code>/*` path segment,
-  matched against the publisher being processed).
+- Per-publisher adapter credentials (API tokens, Basic Auth) live in
+  **GitHub Actions secrets, not AWS Secrets Manager**, since the adapter
+  crawler runs externally as a GitHub Actions workflow and never has AWS
+  credentials beyond the one scoped OIDC role that can call the
+  staging-ingest API (ADR-009, `iam.md`). Scoped per-publisher via
+  GitHub Actions environment secrets, one environment per publisher
+  code, so one publisher's workflow run cannot read another's token.
 - No secret is ever committed to the repo, including in Terraform
   `.tfvars` — those hold Secrets Manager references/ARNs only.

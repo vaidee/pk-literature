@@ -8,9 +8,15 @@ one of each per AZ:
 
 | Tier                    | Route                          | Hosts |
 |--------------------------|----------------------------------|-------|
-| `public`                  | Internet Gateway                  | NAT Gateway ENI(s), Directus/Medusa admin ALBs |
-| `private-isolated`         | **no route to NAT or IGW**          | RDS PostgreSQL, RDS Proxy, `api-catalog`, `api-feed`, `api-search`, `api-identity` Lambdas |
-| `private-nat`               | NAT Gateway                          | `api-publisher-import` Lambda, `api-commerce` Lambda, Directus ECS tasks, Medusa ECS tasks |
+| `public`                  | Internet Gateway                  | NAT Gateway ENI, Directus/Medusa admin ALBs |
+| `private-isolated`         | **no route to NAT or IGW**          | RDS PostgreSQL, RDS Proxy, `api-catalog`, `api-feed`, `api-search`, `api-identity` Lambdas, `api-publisher-import` (staging-ingest Lambda), Directus ECS tasks |
+| `private-nat`               | NAT Gateway                          | `api-commerce` Lambda, Medusa ECS tasks |
+
+Publisher-import and Directus moved to the isolated tier per ADR-009 —
+see that ADR for the reasoning (adapter execution moved outside AWS
+entirely; Directus has no runtime dependency on the public internet).
+Only Commerce (Razorpay order creation) and Medusa (Razorpay refunds)
+still need real egress, which is why the NAT tier is now this small.
 
 `api-gateway` and `cloudfront`/OpenNext are **not** in the VPC at all —
 API Gateway (REGIONAL) invokes VPC-attached Lambdas without needing a
@@ -19,15 +25,21 @@ VPC ENI, not the invocation path.
 
 ## Why the isolated tier exists
 
-Catalog, Feed, Search, and Identity only ever need to reach RDS Proxy
-and a handful of AWS APIs — never the open internet. Putting them in a
-subnet with literally no route out (no NAT, no IGW) means a dependency
-compromise in one of those functions has no network path to exfiltrate
-data or reach the public internet at all, and it's also the highest-
-traffic tier (spec-05/spec-08 latency targets), so it avoids NAT's
-per-GB data-processing charge on the bulk of request volume. Only
-functions that have a genuine reason to leave AWS's network — crawling
-publisher websites, calling Razorpay — sit in the NAT tier.
+Catalog, Feed, Search, Identity, publisher-import (the staging-ingest
+Lambda), and Directus only ever need to reach RDS Proxy and a handful of
+AWS APIs — never the open internet. Putting them in a subnet with
+literally no route out (no NAT, no IGW) means a dependency compromise in
+one of those functions has no network path to exfiltrate data or reach
+the public internet at all, and it's also the highest-traffic tier
+(spec-05/spec-08 latency targets), so it avoids NAT's per-GB
+data-processing charge on the bulk of request volume. Only functions
+that have a genuine reason to leave AWS's network — Commerce and Medusa
+calling Razorpay — sit in the NAT tier. Publisher-import doesn't need to
+be there: the part of the pipeline that actually crawls arbitrary
+publisher websites now runs outside AWS entirely (see ADR-009); the
+Lambda inside the VPC only ever receives an already-fetched payload over
+an authenticated API call and writes it to `staging` — pure inbound, no
+outbound internet dependency.
 
 ## VPC Endpoints (serving the isolated tier)
 
@@ -42,12 +54,13 @@ publisher websites, calling Razorpay — sit in the NAT tier.
 
 Single NAT Gateway (not one per AZ) in every environment to start,
 including prod — cost-optimized per the PRD's stated infrastructure-cost
-metric. Its blast radius is limited by design: an AZ outage taking out
-the NAT Gateway degrades only the NAT-tier functions (publisher imports
-pause, checkout payment calls fail) while the storefront itself — feed,
-search, catalog browsing, cart — keeps working, since those Lambdas
-never depended on NAT. Revisit to NAT-per-AZ if that degradation is ever
-actually hit in prod.
+metric, and now serving only Commerce and Medusa's Razorpay calls after
+the ADR-009 changes. Its blast radius is limited by design: an AZ outage
+taking out the NAT Gateway degrades only checkout/refunds, while the
+storefront itself — feed, search, catalog browsing, cart, publisher
+imports, editorial — keeps working, since none of those depend on NAT
+anymore. Revisit to NAT-per-AZ if that degradation is ever actually hit
+in prod.
 
 ## Security groups
 

@@ -1,7 +1,7 @@
 # SPEC-04 v2
 # Publisher Adapter Framework
 
-Version: 2.0
+Version: 2.1
 
 Status: Approved
 
@@ -13,8 +13,21 @@ Related Documents
 - PRD
 - ADR-005 Publisher Import Workflow
 - ADR-002 Directus Editorial Workbench
+- ADR-009 Externalized Adapter Execution
 - SPEC-02 Catalog Domain
 - SPEC-03 Editorial Workbench
+
+> **Execution model note (v2.1, see ADR-009):** the adapter's
+> discover/fetch/normalize steps run **outside AWS**, as a scheduled
+> GitHub Actions workflow, not as an AWS Lambda triggered by EventBridge.
+> Only the validation/duplicate-detection/staging-write steps — the ones
+> that need database access — run inside AWS, as a Lambda sitting behind
+> a small IAM-authenticated "staging-ingest" API route. This removes the
+> adapter's need for a NAT Gateway entirely (see
+> `infrastructure/networking.md`) without changing anything about the
+> staging schema, the editorial review workflow, or the Adapter SDK
+> interface below — `discover()`/`fetchBooks()`/etc. still run, just on
+> a GitHub Actions runner instead of inside the VPC.
 
 ---
 
@@ -81,39 +94,35 @@ Modify commerce
 
 # 4. Architecture
 
+```
+────────────── outside AWS (GitHub Actions runner) ──────────────
                    Publisher
-
                         │
-
                 Adapter Plugin
-
                         │
-
              Normalization Engine
-
                         │
-
-             Validation Engine
-
+              (POST fetched + normalized books, IAM SigV4 auth)
+────────────────────────┼──────────── AWS VPC, private-isolated ──
+                        ▼
+             Validation Engine   (staging-ingest Lambda)
                         │
-
                 Staging Tables
-
-                        │
-
+────────────────────────┼──────────────────────────────────────────
+                        ▼
                  Directus Review
-
                         │
-
                   Publish Event
-
                         │
-
              Catalog Service
-
                         │
-
           Search + Feed Refresh
+```
+
+The boundary matters: everything above the line can reach arbitrary
+publisher websites/APIs but never touches the database directly;
+everything below the line can reach the database but never leaves AWS's
+network. See ADR-009.
 
 ---
 
@@ -225,11 +234,12 @@ Enabled
 
 # 9. Import Lifecycle
 
-Scheduled Import
+Scheduled Import (GitHub Actions cron, or manual `workflow_dispatch`)
 
 ↓
 
-Adapter
+Adapter — fetch `last_import_cursor` from `catalog.publishers` via the
+staging-ingest API's read route, then run
 
 ↓
 
@@ -243,7 +253,7 @@ Book Extraction
 
 Normalization
 
-↓
+↓ ═══ AWS boundary — POST to staging-ingest API (IAM SigV4 auth) ═══
 
 Validation
 
@@ -545,9 +555,12 @@ Editorial Tags
 
 # 21. Incremental Import
 
-Adapter stores
+`catalog.publishers.last_import_cursor` / `last_import_at` store the
+watermark (opaque, adapter-defined format — last page token, timestamp,
+or source id, whatever that publisher's pagination needs). The external
+runner:
 
-Last Import
+Read cursor (staging-ingest API GET route)
 
 ↓
 
@@ -559,7 +572,13 @@ Compare
 
 ↓
 
-Update
+POST to staging-ingest API
+
+↓
+
+Write cursor back (on successful run completion only — a failed/partial
+run does not advance the watermark, so the next run retries the same
+window)
 
 ---
 
@@ -581,11 +600,11 @@ BookPublished
 
 Consumes
 
-PublisherScheduled
-
-ManualImport
-
-RetryImport
+None — scheduling is no longer event-driven from inside AWS. The
+GitHub Actions workflow's own cron/`workflow_dispatch` trigger replaces
+`PublisherScheduled`/`ManualImport`/`RetryImport`; retries are handled
+by the workflow's own retry logic (§23) before it ever calls the
+staging-ingest API, not by an internal AWS retry event.
 
 ---
 
@@ -687,19 +706,24 @@ Editorial Approval
 
 # 28. Terraform
 
-Publisher Worker
+Staging-Ingest API (API Gateway route + Lambda, private-isolated
+subnet — no NAT, no scheduled EventBridge rule; this Lambda is purely
+inbound, see ADR-009)
 
-Lambda
-
-EventBridge
+EventBridge (still used for `ImportCompleted`/`BookImported`/etc.
+outbound events — just no longer used to *trigger* the adapter)
 
 S3 Bucket
 
-IAM
+IAM (`lambda-api-publisher-import` execution role + `gha-publisher-import-<env>`
+OIDC role for the external runner — see `infrastructure/iam.md`)
 
 CloudWatch
 
-Secrets Manager
+Secrets Manager (Razorpay/Directus/Medusa secrets only — per-publisher
+adapter credentials now live in GitHub Actions secrets, not here, since
+the runner has no AWS Secrets Manager access; see
+`infrastructure/secrets.md`)
 
 ---
 

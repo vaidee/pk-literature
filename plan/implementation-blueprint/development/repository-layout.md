@@ -11,13 +11,24 @@ apps/
   api-search/               NestJS Lambda service — Search
   api-commerce/            NestJS Lambda service — Commerce (fronts Medusa)
   api-identity/            NestJS Lambda service — User & Identity
-  api-publisher-import/    NestJS Lambda service — Publisher Adapter framework
+  api-publisher-import/    NestJS Lambda service — staging-ingest API only (validate,
+                           duplicate-detect, write to `staging`). Runs inside AWS,
+                           private-isolated subnet, no NAT. See ADR-009.
+  publisher-crawler/         Adapter runner — discover/fetch/normalize, invoked by a
+                             GitHub Actions workflow (not deployed to AWS at all), POSTs
+                             results to api-publisher-import's staging-ingest route.
   directus/                 Directus config, custom collections/extensions, flows
   medusa/                   Medusa config, plugins
 
 packages/
   contracts/                Shared TS types + generated OpenAPI client, event schemas
   domain-types/            Shared DTOs/zod schemas (Book, Author, Order, ...)
+  adapter-sdk/              Publisher Adapter interface (SPEC-04 §6: discover/fetchBooks/
+                            fetchBook/fetchInventory/downloadCover/normalize/validate) and
+                            per-publisher adapter implementations (Kalachuvadu, etc.).
+                            Shared between publisher-crawler (runs discover/fetch/normalize)
+                            and api-publisher-import (runs validate, which needs DB access
+                            for duplicate detection so can't run externally).
   ui/                        Shared shadcn/ui component set (used by web; future admin tools)
   eslint-config/
   tsconfig/

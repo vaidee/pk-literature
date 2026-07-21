@@ -16,7 +16,9 @@ terraform/
     s3/                     covers/media bucket, publisher-logos bucket
     cloudfront/
     opennext/
-    iam/                   roles + policies, see iam.md
+    iam/                   roles + policies, see iam.md (includes the gha-publisher-import
+                           OIDC role that lets the external adapter runner call the
+                           staging-ingest API — see ADR-009)
     secrets-manager/        see secrets.md
     eventbridge/
     cloudwatch/             log groups, dashboards, alarms

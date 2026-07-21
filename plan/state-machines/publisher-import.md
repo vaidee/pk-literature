@@ -4,6 +4,14 @@ Two separate lifecycles, both in the `staging` schema (`staging.sql`).
 Don't conflate them: an import run can complete even if individual books
 in it get rejected.
 
+> **Execution note (ADR-009):** the `running` state now spans a GitHub
+> Actions workflow run (external, doing discover/fetch/normalize)
+> followed by one or more calls into the staging-ingest Lambda (internal,
+> doing validate/duplicate-detect/write). The `import_runs` row is
+> created and updated by the external runner via the staging-ingest
+> API's write route — it's the same state machine as before, just
+> spanning the AWS boundary instead of living entirely inside one Lambda.
+
 ## Import Run (`staging.import_runs.status`)
 
 ```
