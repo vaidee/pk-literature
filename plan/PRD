@@ -1,0 +1,405 @@
+# Tamil Literature Platform
+
+Version: 1.0
+Status: Draft
+Document Type: Product Requirements Document (PRD)
+
+---
+
+# Vision
+
+Build the world's best discovery-first platform for Tamil books.
+
+Unlike traditional bookstores that begin with search or categories, this platform presents a personalized literature feed that helps readers discover books through authors, themes, literary movements, publishers, and editorial recommendations.
+
+The platform combines a curated catalog, editorial workflows, knowledge graph, and modern commerce into a single ecosystem.
+
+---
+
+# Goals
+
+## Primary Goals
+
+• Discovery-first reading experience
+
+• High quality editorial catalog
+
+• Publisher self-service onboarding
+
+• Unified catalog across publishers
+
+• Simple commerce experience
+
+• Anonymous personalization
+
+• AI-assisted editorial workflows
+
+• Serverless-first cloud architecture
+
+---
+
+# Non Goals
+
+The platform is not intended to become:
+
+• General ecommerce marketplace
+
+• Social network
+
+• Ebook reader
+
+• Library management software
+
+• ERP
+
+---
+
+# Product Principles
+
+## Discovery over Search
+
+Books should find readers.
+
+Readers should not have to know what they are searching for.
+
+---
+
+## Editorial Quality
+
+Every published book is reviewed by editors.
+
+Publisher imports never publish directly.
+
+---
+
+## Headless Architecture
+
+Frontend, APIs, CMS and Commerce evolve independently.
+
+---
+
+## Open Standards
+
+Avoid vendor lock-in.
+
+Use PostgreSQL.
+
+Use Open APIs.
+
+Infrastructure as Code.
+
+---
+
+## Managed Services
+
+Prefer managed AWS services.
+
+Only run long-lived containers where necessary.
+
+---
+
+# Success Metrics
+
+## Product
+
+Publisher onboarding time
+
+Average feed engagement
+
+Books discovered through recommendations
+
+Conversion rate
+
+Repeat visitors
+
+Catalog growth
+
+---
+
+## Technical
+
+Availability
+
+API latency
+
+Search latency
+
+Import completion time
+
+Infrastructure cost
+
+Deployment frequency
+
+---
+
+# Personas
+
+## Reader
+
+Discovers books.
+
+Likes books.
+
+Adds books to cart.
+
+Purchases books.
+
+---
+
+## Editor
+
+Maintains catalog.
+
+Reviews publisher imports.
+
+Publishes books.
+
+Creates collections.
+
+Maintains literary graph.
+
+---
+
+## Publisher
+
+Provides metadata.
+
+Maintains inventory.
+
+Receives sales.
+
+---
+
+## Operations
+
+Processes orders.
+
+Handles shipping.
+
+Customer support.
+
+---
+
+# Product Modules
+
+01 Website
+
+02 Catalog
+
+03 Editorial Workbench
+
+04 Discovery Feed
+
+05 Commerce
+
+06 Publisher Integration
+
+07 Search
+
+08 Knowledge Graph
+
+09 AI Enrichment
+
+10 Platform
+
+---
+
+# High Level Architecture
+
+OpenNext
+
+↓
+
+API Gateway
+
+↓
+
+Lambda Services
+
+↓
+
+RDS PostgreSQL
+
+↓
+
+Directus (Editorial)
+
+↓
+
+Medusa (Orders)
+
+↓
+
+Publisher Adapters
+
+---
+
+# Technology Decisions
+
+Frontend
+
+Next.js
+
+OpenNext
+
+React
+
+TypeScript
+
+Tailwind
+
+Backend
+
+NestJS
+
+Lambda
+
+API Gateway
+
+Database
+
+Amazon RDS PostgreSQL
+
+Connection Pool
+
+RDS Proxy
+
+CMS
+
+Directus
+
+Commerce
+
+Medusa
+
+Payment
+
+Razorpay
+
+Infrastructure
+
+Terraform
+
+Hosting
+
+AWS
+
+Monitoring
+
+CloudWatch
+
+Storage
+
+S3
+
+CDN
+
+CloudFront
+
+---
+
+# Repository Structure
+
+apps/
+
+packages/
+
+specs/
+
+terraform/
+
+docs/
+
+scripts/
+
+---
+
+# Development Methodology
+
+Specification Driven Development
+
+Every feature begins with
+
+Specification
+
+↓
+
+Architecture Review
+
+↓
+
+API Contract
+
+↓
+
+Implementation
+
+↓
+
+Tests
+
+↓
+
+Deployment
+
+---
+
+# Definition of Done
+
+Every feature must include
+
+Functional Specification
+
+Acceptance Criteria
+
+API Documentation
+
+Terraform Updates
+
+Unit Tests
+
+Integration Tests
+
+Observability
+
+Documentation
+
+Security Review
+
+---
+
+# Future Roadmap
+
+Phase 1
+
+Catalog
+
+Feed
+
+Commerce
+
+Publisher adapters
+
+---
+
+Phase 2
+
+Knowledge Graph
+
+AI Metadata
+
+Semantic Search
+
+Recommendations
+
+---
+
+Phase 3
+
+Mobile Apps
+
+Community Features
+
+Reading Lists
+
+Personal Library

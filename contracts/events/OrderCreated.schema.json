@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "orderId": {
+      "type": "string"
+    },
+    "customerId": {
+      "type": "string"
+    },
+    "total": {
+      "type": "number"
+    }
+  }
+}

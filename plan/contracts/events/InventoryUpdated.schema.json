@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "bookId": {
+      "type": "string"
+    },
+    "stock": {
+      "type": "integer"
+    },
+    "price": {
+      "type": "number"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "orderId": {
+      "type": "string"
+    },
+    "paymentId": {
+      "type": "string"
+    }
+  }
+}

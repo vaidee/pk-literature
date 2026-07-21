@@ -1,0 +1,35 @@
+openapi: 3.1.0
+info:
+  title: Tamil Literature Platform API
+  version: 2.0.0
+servers:
+  - url: /v1
+paths:
+  /feed:
+    get:
+      summary: Get discovery feed
+      responses:
+        '200':
+          description: OK
+  /books/{id}:
+    get:
+      summary: Get book
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string}
+      responses:
+        '200': {description: OK}
+  /search:
+    get:
+      summary: Search books
+  /interest/like:
+    post:
+      summary: Record anonymous like
+  /cart:
+    post:
+      summary: Create/update cart
+  /checkout:
+    post:
+      summary: Checkout cart
