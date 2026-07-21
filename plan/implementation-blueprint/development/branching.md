@@ -69,9 +69,14 @@ Discovery Feed is more useful once Editorial can actually publish books.
 ## Infra ownership
 
 `phase-0-foundations` holds only genuinely cross-cutting infrastructure:
-VPC/networking, Terraform remote state backend, the RDS Postgres instance
-and RDS Proxy, base IAM roles, Secrets Manager bootstrap, the API Gateway
-shell, and the CI skeleton.
+`terraform/bootstrap/` (state backend, OIDC, deploy roles — applied
+once, manually, not through this or any phase branch's CI — see
+`infrastructure/terraform-layout.md`) plus the `environments/<env>/`
+instantiation of VPC/networking, RDS Postgres and RDS Proxy, base IAM
+roles, Secrets Manager bootstrap, the API Gateway shell, and the CI
+skeleton. Environment teardown (`runbooks/teardown.md`) only ever
+targets the latter — `bootstrap/` outlives every environment it
+provisions the backend for, by construction.
 
 Every later phase owns the Terraform for the infrastructure **its own
 services need** and adds it inside its own branch, alongside the

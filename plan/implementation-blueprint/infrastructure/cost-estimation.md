@@ -18,13 +18,23 @@ not a budget commitment.
 | CloudWatch | <$5 | <$5 | ~$10 |
 | **Rough total** | **~$130/mo** | **~$130/mo** | **~$230-280/mo** |
 
-The single-NAT-Gateway decision (`networking.md`) is the single biggest
-lever available if cost needs to drop further — removing it entirely for
-dev/qa (accepting that publisher-import/commerce testing there requires
-a temporary workaround) would save ~$35/mo per environment. Not
-recommended to start; revisit only if cost pressure is real.
-
 RDS Multi-AZ, NAT-per-AZ, and additional Fargate task count for HA are
 all deferred until traffic/uptime requirements justify them (see
 `networking.md` NAT strategy discussion) — this estimate is for a
 pre-launch/early-traffic posture, not steady-state production at scale.
+
+## Teardown as a cost lever
+
+The biggest lever isn't removing a single component — it's that `dev`
+and `qa` don't need to run continuously at all. The bootstrap/
+environment split (`terraform-layout.md`) makes full teardown-and-rebuild
+routine and safe (`runbooks/teardown.md`): tearing down `dev` overnight
+or `qa` between test cycles removes effectively the entire ~$130/mo
+run-rate for however long it's down — RDS, RDS Proxy, NAT Gateway, VPC
+endpoints, and ECS Fargate tasks are all environment-layer resources
+that go away with it, while the state/OIDC/ECR bootstrap layer (a few
+dollars/month at most — S3 + DynamoDB + nothing else billable) keeps
+running so the environment rebuilds cleanly via CI whenever it's needed
+again. This is a bigger and more flexible saving than any single
+component swap, and doesn't trade away NAT's security posture the way
+removing it outright would.

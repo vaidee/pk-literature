@@ -5,6 +5,13 @@ role" reused across domains. No long-lived IAM user access keys
 anywhere; CI/CD authenticates via GitHub Actions OIDC federation (see
 `spec-12-cicd.md`).
 
+**Provisioned in `terraform/bootstrap/`, not per-environment** (see
+`terraform-layout.md`): the GitHub OIDC identity provider itself, and
+every `gha-*` role below. This is deliberate — an environment teardown
+(`runbooks/teardown.md`) must never revoke CI's ability to rebuild that
+environment, so the trust relationship lives outside any environment's
+own Terraform state.
+
 ## Lambda execution roles
 
 | Role                          | Grants |
