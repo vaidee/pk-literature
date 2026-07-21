@@ -1,9 +1,25 @@
 # SPEC-12 --- CI/CD
 
-Version: 1.1
+Version: 1.2
 
 GitHub Actions, authenticated to AWS via OIDC federation (no long-lived
 access keys — see `infrastructure/iam.md`).
+
+> **Current state (v1.2):** the target pipeline below (auto-promote
+> through dev/qa, gated prod) is not yet what's implemented. Right now,
+> `terraform-apply.yml` applies **only on manual `workflow_dispatch`,
+> for `dev` only** — merging to `main` never applies anything by
+> itself, for any environment, and the qa/prod jobs are commented out
+> entirely. This was a deliberate simplification while bootstrap/OIDC
+> isn't wired up to a real AWS account yet: a GitHub Environment
+> protection rule alone was judged not trustworthy as *the* gate, since
+> it silently does nothing if a repo admin forgets to configure required
+> reviewers (this was caught and fixed for `prod` before it caused a
+> problem — see ADR/PR history). `workflow_dispatch`-only is a gate that
+> can't be silently unconfigured. Re-enabling qa/prod (still
+> workflow_dispatch-gated per-environment, not auto-promote) is a
+> deliberate follow-up once dev is proven out, not the target state
+> described below in one step.
 
 ## Branch strategy
 

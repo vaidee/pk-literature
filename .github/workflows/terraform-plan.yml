@@ -1,0 +1,76 @@
+name: Terraform Plan
+
+# spec-12-cicd.md — PR pipeline: fmt/validate/plan only, never apply.
+# Runs against every environment whose config the PR actually touches,
+# never against terraform/bootstrap/ (that layer has no pipeline at all
+# — see terraform/bootstrap/README.md).
+
+on:
+  pull_request:
+    paths:
+      - "terraform/modules/**"
+      - "terraform/environments/**"
+      - ".github/workflows/terraform-*.yml"
+
+permissions:
+  id-token: write # OIDC — no long-lived AWS keys, infrastructure/iam.md
+  contents: read
+  pull-requests: write # to comment the plan output on the PR
+
+jobs:
+  detect-changed-environments:
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.detect.outputs.environments }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- terraform/environments terraform/modules)
+          envs="[]"
+          for e in dev qa prod; do
+            if echo "$changed" | grep -qE "terraform/(environments/$e/|modules/)"; then
+              envs=$(echo "$envs" | jq -c ". + [\"$e\"]")
+            fi
+          done
+          echo "environments=$envs" >> "$GITHUB_OUTPUT"
+
+  plan:
+    needs: detect-changed-environments
+    if: needs.detect-changed-environments.outputs.environments != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.detect-changed-environments.outputs.environments) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars[format('AWS_DEPLOY_ROLE_ARN_{0}', matrix.environment)] }}
+          aws-region: ap-south-1
+
+      - name: terraform init
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform init -input=false
+
+      - name: terraform validate
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform validate
+
+      - name: terraform plan
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform plan -input=false -out=tfplan
+
+      # Deliberately no `terraform apply` here — see terraform-apply.yml,
+      # which only runs after merge to main.

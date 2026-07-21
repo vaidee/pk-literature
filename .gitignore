@@ -1,0 +1,22 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
+# terraform/bootstrap uses LOCAL state on purpose (see its README) —
+# never commit it even accidentally.
+terraform/bootstrap/terraform.tfstate*
+
+# Node / general
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+.DS_Store

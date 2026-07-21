@@ -1,0 +1,26 @@
+variable "aws_region" {
+  type    = string
+  default = "ap-south-1"
+}
+
+variable "domain_name" {
+  description = "Placeholder — set the real domain before first apply."
+  type        = string
+  default     = "dev.pk-literature.example"
+}
+
+variable "create_hosted_zone" {
+  type    = bool
+  default = true
+}
+
+variable "alarm_email" {
+  description = "Placeholder — set before first apply."
+  type        = string
+  default     = "alerts+dev@pk-literature.example"
+}
+
+variable "azs" {
+  type    = list(string)
+  default = ["ap-south-1a", "ap-south-1b"]
+}
