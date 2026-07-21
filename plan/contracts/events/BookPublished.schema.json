@@ -5,7 +5,17 @@
       "type": "string"
     },
     "bookId": {
-      "type": "string"
+      "type": "string",
+      "format": "uuid"
+    },
+    "workId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Parent work. Consumers that care about work-level publication (e.g. is this the first edition of this work to go live) infer it by checking whether other published Books already exist for this workId — there is no separate WorkPublished event."
+    },
+    "isWorksFirstPublishedBook": {
+      "type": "boolean",
+      "description": "True if this event caused the parent work to transition draft/approved -> published (see catalog.enforce_book_work_status trigger)."
     },
     "publishedAt": {
       "type": "string",
@@ -14,6 +24,8 @@
   },
   "required": [
     "eventId",
-    "bookId"
+    "bookId",
+    "workId",
+    "publishedAt"
   ]
 }

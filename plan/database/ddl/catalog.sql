@@ -231,6 +231,33 @@ CREATE TRIGGER trg_books_updated_at
   BEFORE UPDATE ON catalog.books
   FOR EACH ROW EXECUTE FUNCTION catalog.set_updated_at();
 
+-- Status invariant: a Book cannot become Published unless its Work has
+-- already been editorially approved. A Work is promoted to Published
+-- automatically the first time any of its Books publishes; it never
+-- auto-reverts to Archived when its Books are archived — that stays an
+-- explicit editor action so a Work doesn't silently disappear.
+CREATE OR REPLACE FUNCTION catalog.enforce_book_work_status()
+RETURNS trigger AS $$
+DECLARE
+  work_status catalog.editorial_status;
+BEGIN
+  IF NEW.status = 'published' THEN
+    SELECT status INTO work_status FROM catalog.works WHERE id = NEW.work_id;
+    IF work_status NOT IN ('approved', 'published') THEN
+      RAISE EXCEPTION 'Book % cannot be published: work % is not approved (status=%)',
+        NEW.id, NEW.work_id, work_status;
+    END IF;
+    UPDATE catalog.works SET status = 'published'
+      WHERE id = NEW.work_id AND status <> 'published';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_books_enforce_work_status
+  BEFORE INSERT OR UPDATE OF status ON catalog.books
+  FOR EACH ROW EXECUTE FUNCTION catalog.enforce_book_work_status();
+
 -- Edition-specific contributors: translator, illustrator, editor of THIS
 -- printing (distinct from work_authors, which is the original author(s)).
 CREATE TABLE catalog.book_contributors (

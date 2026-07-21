@@ -1,14 +1,38 @@
 {
   "type": "object",
   "properties": {
-    "publisher": {
-      "type": "string"
-    },
     "runId": {
-      "type": "string"
+      "type": "string",
+      "format": "uuid"
     },
-    "booksImported": {
+    "publisherId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "failed", "partially_failed"]
+    },
+    "totalBooks": {
+      "type": "integer"
+    },
+    "newBooks": {
+      "type": "integer"
+    },
+    "updatedBooks": {
+      "type": "integer"
+    },
+    "rejectedBooks": {
       "type": "integer"
     }
-  }
+  },
+  "required": [
+    "runId",
+    "publisherId",
+    "status",
+    "totalBooks",
+    "newBooks",
+    "updatedBooks",
+    "rejectedBooks"
+  ]
 }
