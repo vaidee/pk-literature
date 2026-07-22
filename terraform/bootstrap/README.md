@@ -31,7 +31,11 @@ terraform apply
    workflow files).
 2. Take `state_bucket_name` / `state_lock_table_name` and fill in each
    `terraform/environments/<env>/backend.tf`.
-3. From that point on, `terraform/environments/` is applied by CI, not
+3. Take the `gha_publisher_import_role_arns` output and put each
+   environment's role ARN into `.github/workflows/publisher-import.yml`'s
+   `role-to-assume` (same repo/environment-variable convention as step 1
+   — see that workflow file).
+4. From that point on, `terraform/environments/` is applied by CI, not
    manually.
 
 ## Re-running later

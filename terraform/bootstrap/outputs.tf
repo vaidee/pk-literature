@@ -18,3 +18,8 @@ output "gha_deploy_role_arns" {
 output "directus_ecr_repository_url" {
   value = aws_ecr_repository.directus.repository_url
 }
+
+output "gha_publisher_import_role_arns" {
+  description = "Role ARN per environment — used to fill in .github/workflows/publisher-import.yml's role-to-assume."
+  value       = { for env, role in aws_iam_role.gha_publisher_import : env => role.arn }
+}

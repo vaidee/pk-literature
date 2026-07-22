@@ -5,8 +5,11 @@ REST APIs, by domain (see each domain's own spec for the full list):
 - Catalog (SPEC-02) — **read-only**: GET /works, GET /works/{id},
   GET /books, GET /books/{id}, GET /authors, GET /publishers,
   GET /collections, GET /themes, GET /genres. No catalog service ever
-  accepts a write — all catalog/staging writes happen through Directus
-  directly against Postgres, not through this API layer.
+  accepts a write — `catalog` writes happen through Directus directly
+  against Postgres (SPEC-03), never through this API layer. `staging`
+  has one additional write path beyond Directus's own editorial edits:
+  the staging-ingest API below (SPEC-04/ADR-009) — still not a public
+  endpoint, and still never `catalog` itself.
 - Discovery (SPEC-05, SPEC-08) — GET /feed, GET /feed/shelf/{id},
   POST /interest/like, GET /search, GET /autocomplete, GET /browse/*,
   GET /books/{id}/similar.
@@ -16,11 +19,16 @@ REST APIs, by domain (see each domain's own spec for the full list):
 - Identity (SPEC-07) — POST /auth/login, POST /auth/logout,
   POST /auth/register, GET /profile, PATCH /profile, GET /addresses,
   POST /addresses, PATCH /addresses/{id}, DELETE /addresses/{id}.
-- Publisher import is **not** a public API — adapters run as scheduled
-  Lambda workers (SPEC-04) writing to `staging`. There is no
-  `POST /publisher/import` endpoint; imports are triggered by
-  EventBridge schedule or an internal manual-trigger call, not by an
-  external caller.
+- Publisher import (SPEC-04, ADR-009) is **not** a public API —
+  discover/fetch/normalize run outside AWS as a GitHub Actions
+  workflow (cron or `workflow_dispatch`, not EventBridge-triggered),
+  which then calls the staging-ingest API
+  (`GET /publishers/{id}/cursor`, `POST /publishers/{id}/import-runs`,
+  `POST /import-runs/{id}/books`, `POST /import-runs/{id}/complete`).
+  Every staging-ingest route requires AWS_IAM authorization (SigV4,
+  the `gha-publisher-import-<env>` role) — there is no
+  externally-callable, unauthenticated route here, unlike Catalog/
+  Discovery's genuinely public reads.
 
 Standards: OpenAPI 3.1, JSON, versioned (/v1), idempotency keys for
 mutations (cart/checkout/payments), RFC7807 problem-details errors
@@ -29,7 +37,11 @@ mutations (cart/checkout/payments), RFC7807 problem-details errors
 Authentication: Public (Catalog, Discovery reads), Customer JWT
 (Commerce, Identity authenticated routes — anonymous UUID cookie for
 unauthenticated cart/checkout/likes per SPEC-07), Editorial (Directus
-only, not exposed through this API layer at all).
+only, not exposed through this API layer at all), AWS_IAM/SigV4
+(Publisher import's staging-ingest routes only — the one place this
+API layer authenticates a machine caller via AWS credentials rather
+than a cookie/JWT, since the caller is a GitHub Actions workflow, not
+an end user).
 
 Acceptance: every endpoint documented with request/response schemas in
 `plan/contracts/openapi/openapi.yaml` (currently a stub covering only a

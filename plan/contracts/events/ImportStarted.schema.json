@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "publisherId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trigger": {
+      "type": "string",
+      "enum": ["scheduled", "manual", "retry"]
+    }
+  },
+  "required": ["runId", "publisherId", "trigger"]
+}

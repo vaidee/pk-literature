@@ -10,6 +10,12 @@ export interface BookPublishedEvent {
   publishedAt: string; // ISO 8601
 }
 
+export interface ImportStartedEvent {
+  runId: string;
+  publisherId: string;
+  trigger: "scheduled" | "manual" | "retry";
+}
+
 export interface ImportCompletedEvent {
   runId: string;
   publisherId: string;
@@ -24,6 +30,23 @@ export interface InventoryUpdatedEvent {
   bookId: string;
   stock: number;
   price: number;
+}
+
+// Publisher-import per-row events (SPEC-04 §22) — one per staging row,
+// as distinct from the per-run ImportCompletedEvent above.
+export interface BookImportedEvent {
+  stagingBookId: string;
+  importRunId: string;
+  publisherId: string;
+  sourceRef: string;
+}
+
+export interface ImportRejectedEvent {
+  stagingBookId: string;
+  importRunId: string;
+  publisherId: string;
+  sourceRef: string;
+  reasons: string[];
 }
 
 // Commerce events (SPEC-06) — defined here now since the schema JSON

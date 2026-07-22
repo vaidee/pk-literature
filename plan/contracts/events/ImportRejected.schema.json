@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "properties": {
+    "stagingBookId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "importRunId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "publisherId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sourceRef": {
+      "type": "string"
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["stagingBookId", "importRunId", "publisherId", "sourceRef", "reasons"]
+}
