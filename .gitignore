@@ -20,3 +20,7 @@ node_modules/
 dist/
 build/
 .DS_Store
+
+# Lambda packaging build artifacts (apps/*/scripts/package-lambda.sh)
+.lambda-package/
+**/dist-lambda.zip

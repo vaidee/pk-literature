@@ -2,6 +2,7 @@
   "name": "api-catalog",
   "version": "0.0.0",
   "private": true,
+  "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "ts-node -r tsconfig-paths/register src/main.ts",
@@ -11,9 +12,11 @@
     "lint": "eslint .",
     "migrate:up": "node-pg-migrate up --migrations-dir migrations -j sql",
     "migrate:down": "node-pg-migrate down --migrations-dir migrations -j sql",
-    "migrate:create": "node-pg-migrate create --migrations-dir migrations -j sql"
+    "migrate:create": "node-pg-migrate create --migrations-dir migrations -j sql",
+    "package:lambda": "bash scripts/package-lambda.sh"
   },
   "dependencies": {
+    "@aws-sdk/rds-signer": "^3.687.0",
     "@codegenie/serverless-express": "^4.16.0",
     "@nestjs/common": "^10.4.6",
     "@nestjs/core": "^10.4.6",
