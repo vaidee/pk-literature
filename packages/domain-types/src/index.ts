@@ -7,3 +7,4 @@ export * from "./work";
 export * from "./collection";
 export * from "./inventory";
 export * from "./book";
+export * from "./feed";

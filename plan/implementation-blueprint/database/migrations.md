@@ -18,6 +18,21 @@ cross-schema assumptions.
 
 - One migration directory per owning service (e.g.
   `apps/api-catalog/migrations/` owns `catalog` + `staging`).
+- Every service after `api-catalog` must pass its own
+  `--migrations-table pgmigrations_<service>` to `node-pg-migrate`
+  (see any service's `package.json` `migrate:*` scripts for the exact
+  flag). Discovered running Phase 4's migrations for real: all
+  services share one physical database, and `node-pg-migrate`'s
+  default tracking table (`pgmigrations`) is a single table in
+  `public` — a second service migrating against the same default table
+  makes `node-pg-migrate` apply its own `checkOrder` validation across
+  *every* row in that table, including rows from directories it was
+  never pointed at, and it fails outright (`Can't determine timestamp`,
+  `is preceding already run migration`). `api-catalog` keeps the bare
+  default name since it was there first and is already deployed;
+  changing it now would be a breaking rename for no benefit. Every
+  service after it needs its own table to keep its migration history
+  independent.
 - Migrations are forward-only in shared environments (qa/prod) — no
   down-migrations run outside local dev. Fix-forward instead.
 - Every migration file corresponds to one logical change and is named
