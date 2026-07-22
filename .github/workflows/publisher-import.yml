@@ -1,0 +1,90 @@
+name: Publisher Import
+
+# SPEC-04 §9 / ADR-009 — runs the external half of the publisher-import
+# pipeline (discover/fetch/normalize/downloadCover, apps/publisher-crawler)
+# entirely outside AWS, then POSTs to the staging-ingest API with
+# SigV4-signed requests (terraform/environments/<env>/api-publisher-import.tf,
+# terraform/bootstrap/gha-publisher-import.tf).
+#
+# The `schedule` cron trigger is commented out for now — no AWS
+# environment has actually been applied yet (terraform-apply.yml is
+# also gated to manual dev-only runs, see that file's own header), so a
+# live cron would just fail against nothing every time it fired.
+# Uncomment once dev has real infrastructure and a real gha-publisher-import-dev
+# role ARN in this repo's variables. Until then, workflow_dispatch is
+# the only way to run this — same "manual gate first" posture as the
+# deploy pipeline.
+#
+# on:
+#   schedule:
+#     - cron: "0 3 * * *"  # SPEC-04 §8's "Polling Frequency" is per-publisher
+#                          # config in catalog.publishers, not expressible as a
+#                          # single cron — this is a daily floor; a publisher
+#                          # needing more frequent polling gets its own
+#                          # schedule entry once that's a real requirement.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to run against. Only 'dev' is wired up right now, matching terraform-apply.yml."
+        required: true
+        type: choice
+        options:
+          - dev
+        default: dev
+      publisher_id:
+        description: "catalog.publishers.id (UUID) of the publisher to import."
+        required: true
+      publisher_code:
+        description: "catalog.publishers.code — must match a registered adapter in apps/publisher-crawler/src/adapters-registry.ts."
+        required: true
+      trigger:
+        description: "Recorded on the import_runs row (SPEC-04 §9)."
+        required: true
+        type: choice
+        options:
+          - manual
+          - retry
+        default: manual
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  import-dev:
+    if: inputs.environment == 'dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Build adapter-sdk + publisher-crawler
+        run: pnpm --filter @pk-literature/adapter-sdk --filter publisher-crawler run build
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISHER_IMPORT_ROLE_ARN_DEV }}
+          aws-region: ap-south-1
+      - name: Run import
+        working-directory: apps/publisher-crawler
+        env:
+          PUBLISHER_ID: ${{ inputs.publisher_id }}
+          PUBLISHER_CODE: ${{ inputs.publisher_code }}
+          # Per-publisher base URL belongs in GitHub Actions environment
+          # secrets/variables, one per publisher code
+          # (infrastructure/secrets.md: "Per-publisher adapter
+          # credentials... live in GitHub Actions secrets, not AWS
+          # Secrets Manager"), not hardcoded here — this repo only has
+          # the Kalachuvadu reference adapter registered so far, hence
+          # the single variable rather than a lookup table.
+          PUBLISHER_BASE_URL: ${{ vars.KALACHUVADU_BASE_URL }}
+          STAGING_INGEST_BASE_URL: ${{ vars.STAGING_INGEST_BASE_URL_DEV }}
+          AWS_REGION: ap-south-1
+          IMPORT_TRIGGER: ${{ inputs.trigger }}
+        run: pnpm start

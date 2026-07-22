@@ -1,0 +1,27 @@
+{
+  "name": "@pk-literature/adapter-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@pk-literature/eslint-config": "workspace:*",
+    "@pk-literature/tsconfig": "workspace:*",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^20.16.11",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.3"
+  }
+}
