@@ -1,0 +1,70 @@
+variable "environment" {
+  type = string
+}
+
+variable "service_name" {
+  type = string
+}
+
+variable "cluster_id" {
+  description = "Shared ECS cluster (environments/<env>/ecs-cluster.tf) — not created by this module."
+  type        = string
+}
+
+variable "image" {
+  description = "Full ECR image URI including tag, e.g. <account>.dkr.ecr.<region>.amazonaws.com/pk-literature/directus:1.2.3."
+  type        = string
+}
+
+variable "container_port" {
+  type = number
+}
+
+variable "cpu" {
+  type    = number
+  default = 512
+}
+
+variable "memory" {
+  type    = number
+  default = 1024
+}
+
+variable "desired_count" {
+  type    = number
+  default = 1
+}
+
+variable "environment_variables" {
+  type    = map(string)
+  default = {}
+}
+
+variable "secrets" {
+  description = "Map of container env var name -> Secrets Manager ARN. Resolved by ECS at task start, never passed through Terraform state as plaintext."
+  type        = map(string)
+  default     = {}
+}
+
+variable "subnet_ids" {
+  type = list(string)
+}
+
+variable "security_group_ids" {
+  type = list(string)
+}
+
+variable "target_group_arn" {
+  type = string
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 30
+}
+
+variable "additional_policy_json" {
+  description = "Extra task-role IAM policy JSON (e.g. RDS Proxy connect, S3, EventBridge). null = no additional policy."
+  type        = string
+  default     = null
+}

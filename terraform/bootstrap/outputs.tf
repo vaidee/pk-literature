@@ -14,3 +14,7 @@ output "gha_deploy_role_arns" {
   description = "Role ARN per environment — used to fill in .github/workflows/*.yml's role-to-assume, and as the environments/<env>/backend.tf state key namespace."
   value       = { for env, role in aws_iam_role.gha_deploy : env => role.arn }
 }
+
+output "directus_ecr_repository_url" {
+  value = aws_ecr_repository.directus.repository_url
+}

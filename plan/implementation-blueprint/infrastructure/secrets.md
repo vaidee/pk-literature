@@ -26,6 +26,17 @@
   entire class of secret-rotation problem for the highest-traffic path.
   The master password in Secrets Manager exists only for Terraform/
   migration-runner bootstrap.
+- **Exception: Directus.** `ecs-directus` connects with a genuinely
+  stored password (`/<env>/directus/db-password`, the `directus_app`
+  role — migration `20260101000006_directus_app_role.sql`), injected
+  via ECS task-definition `secrets`, not IAM auth. Directus's Knex-based
+  Postgres client has no built-in support for the dynamic IAM token
+  refresh that `apps/api-catalog`'s Kysely setup implements (RDS IAM
+  tokens expire every 15 minutes) — there was no reasonable way to bolt
+  that onto Directus without patching its DB layer. `/<env>/directus/*`
+  also holds Directus's own `KEY`/`SECRET` encryption values and the
+  first-boot admin password, none of which are DB credentials at all
+  and so were never IAM-auth candidates in the first place.
 - Razorpay webhook signature verification (SPEC-06/SPEC-13) reads the
   signing secret from Secrets Manager on every webhook call — never
   cached beyond the Lambda execution environment's lifetime.
