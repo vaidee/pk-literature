@@ -24,3 +24,9 @@ variable "azs" {
   type    = list(string)
   default = ["ap-south-1a", "ap-south-1b"]
 }
+
+variable "directus_image_tag" {
+  description = "Tag mirrored into pk-literature/directus by .github/workflows/mirror-directus-image.yml — matches apps/directus/Dockerfile's pinned base."
+  type        = string
+  default     = "11.17.4"
+}

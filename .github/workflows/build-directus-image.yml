@@ -1,0 +1,73 @@
+name: Build Directus Image
+
+# Builds apps/directus/Dockerfile — layers the custom eventbridge-put-event
+# Flow operation extension on top of the pinned upstream directus/directus
+# image — and pushes the result to the shared ECR repo
+# (terraform/bootstrap/ecr.tf's pk-literature/directus). The running ECS
+# task pulls only from here, never Docker Hub directly: it lives in the
+# private-isolated subnet tier with no NAT/internet route (ADR-009's
+# reasoning, applied to ECS instead of Lambda) — this CI runner is where
+# the one-time internet-facing pull happens instead.
+#
+# GATED, MANUAL-TRIGGER ONLY, matching terraform-apply.yml's philosophy:
+# nothing pushes a new image on every merge. Run this explicitly, then
+# separately re-run terraform-apply.yml (bumping directus_image_tag if
+# you're moving to a new upstream version) to roll it out.
+#
+# ECR repo tags are IMMUTABLE (terraform/bootstrap/ecr.tf) — pushing a
+# tag that already exists fails loudly rather than silently overwriting,
+# so this checks first and skips the push if the tag is already there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      directus_version:
+        description: "Upstream directus/directus version to build from and tag as (must match environments/*/variables.tf's directus_image_tag to actually roll out)."
+        required: true
+        default: "11.17.4"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ECR_REPOSITORY: pk-literature/directus
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_DEV }}
+          aws-region: ap-south-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      - name: Skip if tag already exists (immutable repo)
+        id: check
+        run: |
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="${{ inputs.directus_version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        if: steps.check.outputs.exists == 'false'
+        working-directory: apps/directus
+        run: |
+          docker build \
+            --build-arg DIRECTUS_VERSION="${{ inputs.directus_version }}" \
+            -t "${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:${{ inputs.directus_version }}" \
+            .
+
+      - name: Push
+        if: steps.check.outputs.exists == 'false'
+        run: docker push "${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:${{ inputs.directus_version }}"

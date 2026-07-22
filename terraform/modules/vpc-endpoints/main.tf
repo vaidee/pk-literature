@@ -1,9 +1,12 @@
 # Lets the private-isolated tier (RDS-only Lambdas + Directus) reach S3,
-# Secrets Manager, EventBridge, and CloudWatch Logs without a NAT
+# Secrets Manager, EventBridge, CloudWatch Logs, and ECR without a NAT
 # Gateway — infrastructure/networking.md. S3 is a free gateway endpoint;
 # the rest are small flat-rate interface endpoints, cheaper than routing
 # that traffic through NAT once more than a couple of low-volume
-# functions are doing it.
+# functions are doing it. ecr.api/ecr.dkr were added in Phase 2 —
+# Directus's ECS task is the first thing in the isolated tier that
+# needs to pull a container image (Lambda deployment packages don't go
+# through ECR at all, so nothing needed this before now).
 
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = var.vpc_id
@@ -22,6 +25,8 @@ locals {
     "secretsmanager",
     "events",
     "logs",
+    "ecr.api",
+    "ecr.dkr",
   ]
 }
 

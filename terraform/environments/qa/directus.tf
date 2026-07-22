@@ -1,0 +1,104 @@
+# Phase 2's Editorial Workbench (Directus) wiring, in its own file per
+# development/branching.md ("each phase owns its own infra"). The image
+# lives in the shared ECR repo (terraform/bootstrap/ecr.tf) — mirrored
+# there by CI (.github/workflows/mirror-directus-image.yml) since the
+# private-isolated tier this task runs in has no NAT/internet route to
+# pull from Docker Hub directly (ADR-009's reasoning, applied to ECS
+# instead of Lambda). Directus is the sole write path into `catalog`
+# (SPEC-03) — it connects with a stored password as the directus_app
+# role (migration 20260101000006), not RDS Proxy IAM auth, since its
+# Knex-based Postgres client has no dynamic token refresh support
+# (infrastructure/secrets.md's stored-password exception).
+
+locals {
+  directus_ecr_repository_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/pk-literature/directus"
+  directus_db_user            = module.secrets_manager.directus_db_username
+}
+
+data "aws_iam_policy_document" "directus_task" {
+  statement {
+    effect  = "Allow"
+    actions = ["rds-db:connect"]
+    resources = [
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${module.rds_proxy.iam_auth_resource_id}/${local.directus_db_user}",
+    ]
+  }
+
+  # S3 read/write for covers, publisher logos, promo banners (SPEC-03
+  # "Media Management" / "Stored in Amazon S3").
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${module.s3.bucket_arn}/*"]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [module.s3.bucket_arn]
+  }
+
+  # infrastructure/iam.md's direct ecs-directus grant — the
+  # eventbridge-put-event Flow operation (apps/directus/extensions)
+  # calls PutEvents under this task role, not via a relay.
+  statement {
+    effect    = "Allow"
+    actions   = ["events:PutEvents"]
+    resources = [module.eventbridge.bus_arn]
+  }
+}
+
+module "alb_directus" {
+  source = "../../modules/alb"
+
+  environment              = "qa"
+  service_name             = "directus"
+  vpc_id                   = module.vpc.vpc_id
+  public_subnet_ids        = module.vpc.public_subnet_ids
+  alb_security_group_id    = module.security_groups.alb_admin_sg_id
+  domain_name              = var.domain_name
+  regional_certificate_arn = module.route53_acm.regional_certificate_arn
+  hosted_zone_id           = module.route53_acm.zone_id
+  target_port              = 8055
+  health_check_path        = "/server/health"
+}
+
+module "ecs_directus" {
+  source = "../../modules/ecs-service"
+
+  environment    = "qa"
+  service_name   = "directus"
+  cluster_id     = aws_ecs_cluster.this.id
+  image          = "${local.directus_ecr_repository_url}:${var.directus_image_tag}"
+  container_port = 8055
+
+  subnet_ids         = module.vpc.private_isolated_subnet_ids
+  security_group_ids = [module.security_groups.ecs_directus_sg_id]
+  target_group_arn   = module.alb_directus.target_group_arn
+
+  environment_variables = {
+    DB_CLIENT                  = "pg"
+    DB_HOST                    = module.rds_proxy.proxy_endpoint
+    DB_PORT                    = "5432"
+    DB_DATABASE                = "pk_literature"
+    DB_USER                    = local.directus_db_user
+    DB_SSL_REJECT_UNAUTHORIZED = "true"
+    PUBLIC_URL                 = "https://directus.${var.domain_name}"
+    ADMIN_EMAIL                = module.secrets_manager.directus_admin_email
+    STORAGE_LOCATIONS          = "s3"
+    STORAGE_S3_DRIVER          = "s3"
+    STORAGE_S3_BUCKET          = module.s3.bucket_id
+    STORAGE_S3_REGION          = data.aws_region.current.name
+    EVENTBRIDGE_BUS_NAME       = module.eventbridge.bus_name
+    WEBSOCKETS_ENABLED         = "false"
+  }
+
+  secrets = {
+    DB_PASSWORD    = module.secrets_manager.directus_db_password_secret_arn
+    KEY            = module.secrets_manager.directus_key_secret_arn
+    SECRET         = module.secrets_manager.directus_secret_secret_arn
+    ADMIN_PASSWORD = module.secrets_manager.directus_admin_password_secret_arn
+  }
+
+  additional_policy_json = data.aws_iam_policy_document.directus_task.json
+}

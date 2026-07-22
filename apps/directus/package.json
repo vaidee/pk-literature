@@ -1,0 +1,19 @@
+{
+  "name": "directus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Editorial Workbench (SPEC-03) — the running service is the official directus/directus image (see Dockerfile); this package holds the config-as-code bootstrap script and the custom Flow operation extension's source (extensions/operations/eventbridge-put-event), which builds independently via its own package.json.",
+  "scripts": {
+    "bootstrap": "ts-node scripts/bootstrap.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@directus/sdk": "^17.0.0"
+  },
+  "devDependencies": {
+    "@pk-literature/tsconfig": "workspace:*",
+    "@types/node": "^20.16.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

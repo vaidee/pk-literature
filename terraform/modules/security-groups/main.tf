@@ -1,8 +1,7 @@
-# Phase 0 scope only: the DB-access chain + VPC endpoint access.
-# ecs-directus-sg, ecs-medusa-sg, and alb-admin-sg are added by
-# phase-2-editorial-workbench and phase-6-commerce respectively, per
-# development/branching.md's "each phase owns its own infra" rule —
-# they don't exist yet because those services don't exist yet.
+# Phase 0 added the DB-access chain + VPC endpoint access. Phase 2 adds
+# ecs-directus-sg and alb-admin-sg below. ecs-medusa-sg is still added
+# by phase-6-commerce, per development/branching.md's "each phase owns
+# its own infra" rule.
 #
 # Chain: rds-sg <- rds-proxy-sg <- lambda-db-sg
 # (infrastructure/networking.md)
@@ -162,4 +161,86 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_db" {
   to_port                      = 443
   ip_protocol                  = "tcp"
   description                  = "HTTPS from private-isolated-tier Lambda/ECS clients"
+}
+
+# ---------------------------------------------------------------------
+# Phase 2: Directus admin ALB + ECS task. Directus sits in the
+# private-isolated tier (ADR-009 — nothing in its runtime needs the
+# internet; image pulls happen at deploy time via VPC endpoints /
+# ECR, not runtime egress), fronted by a public-subnet ALB.
+# ---------------------------------------------------------------------
+
+resource "aws_security_group" "alb_admin" {
+  name_prefix = "pk-literature-${var.environment}-alb-admin-"
+  vpc_id      = var.vpc_id
+  description = "Admin ALB (Directus, future Medusa) — public HTTPS ingress only"
+
+  tags = {
+    Name        = "pk-literature-${var.environment}-alb-admin"
+    Environment = var.environment
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_security_group" "ecs_directus" {
+  name_prefix = "pk-literature-${var.environment}-ecs-directus-"
+  vpc_id      = var.vpc_id
+  description = "Directus ECS task — inbound only from the admin ALB"
+
+  tags = {
+    Name        = "pk-literature-${var.environment}-ecs-directus"
+    Environment = var.environment
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "alb_admin_from_internet" {
+  security_group_id = aws_security_group.alb_admin.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "HTTPS from the internet — editorial users only reach this via Directus's own auth"
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_admin_to_ecs_directus" {
+  security_group_id            = aws_security_group.alb_admin.id
+  referenced_security_group_id = aws_security_group.ecs_directus.id
+  from_port                    = 8055
+  to_port                      = 8055
+  ip_protocol                  = "tcp"
+  description                  = "Directus container port"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ecs_directus_from_alb" {
+  security_group_id            = aws_security_group.ecs_directus.id
+  referenced_security_group_id = aws_security_group.alb_admin.id
+  from_port                    = 8055
+  to_port                      = 8055
+  ip_protocol                  = "tcp"
+  description                  = "Directus container port from the admin ALB"
+}
+
+resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_rds_proxy" {
+  security_group_id            = aws_security_group.ecs_directus.id
+  referenced_security_group_id = aws_security_group.rds_proxy.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "Postgres to RDS Proxy"
+}
+
+resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_vpc_endpoints" {
+  security_group_id            = aws_security_group.ecs_directus.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS to S3/Secrets Manager/EventBridge/ECR interface endpoints"
 }

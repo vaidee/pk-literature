@@ -17,3 +17,11 @@ output "lambda_egress_sg_id" {
 output "vpc_endpoints_sg_id" {
   value = aws_security_group.vpc_endpoints.id
 }
+
+output "alb_admin_sg_id" {
+  value = aws_security_group.alb_admin.id
+}
+
+output "ecs_directus_sg_id" {
+  value = aws_security_group.ecs_directus.id
+}
