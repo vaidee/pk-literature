@@ -1,25 +1,51 @@
 import { Global, Module, type Provider } from "@nestjs/common";
 import { CamelCasePlugin, Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
+import { Signer } from "@aws-sdk/rds-signer";
 import type { Database } from "./database.types";
 
 export const KYSELY = Symbol("KYSELY");
 
-// Connects via RDS Proxy using IAM database auth in deployed
-// environments (infrastructure/secrets.md) — locally, a plain
-// connection string against docker-compose's Postgres. The IAM-token
-// vs password decision is made by how DATABASE_URL/PG* env vars are
-// populated at deploy time, not by anything in this file; Lambda's
-// deploy wiring (added when this service is actually wired into
-// Terraform) is responsible for minting a fresh auth token per cold
-// start, since IAM tokens expire.
+// DB_AUTH_MODE=iam (deployed environments, via RDS Proxy) mints a fresh
+// IAM auth token per physical connection instead of using a stored
+// password — infrastructure/secrets.md's preferred path for the
+// highest-traffic services. DB_AUTH_MODE=password (local dev, via
+// docker-compose) uses PGPASSWORD directly. `pg`'s Pool accepts a
+// password callback specifically so each new connection (not just the
+// first) gets a fresh, unexpired token — RDS IAM tokens are valid 15
+// minutes, and a long-lived Lambda execution environment can easily
+// outlive that between cold starts.
+function resolvePassword(): string | (() => Promise<string>) {
+  if (process.env.DB_AUTH_MODE !== "iam") {
+    return process.env.PGPASSWORD ?? "";
+  }
+
+  const signer = new Signer({
+    hostname: requireEnv("PGHOST"),
+    port: Number(process.env.PGPORT ?? 5432),
+    username: requireEnv("PGUSER"),
+    region: requireEnv("AWS_REGION"),
+  });
+
+  return () => signer.getAuthToken();
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
 const kyselyProvider: Provider = {
   provide: KYSELY,
   useFactory: () => {
     const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // RDS Proxy requires TLS; rejectUnauthorized left default (true)
-      // in every environment except explicit local dev.
+      host: process.env.PGHOST,
+      port: Number(process.env.PGPORT ?? 5432),
+      database: process.env.PGDATABASE,
+      user: process.env.PGUSER,
+      password: resolvePassword(),
+      // RDS Proxy requires TLS; local dev (docker-compose) disables it.
       ssl:
         process.env.PGSSL === "disable"
           ? undefined

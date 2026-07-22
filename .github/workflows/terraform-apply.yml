@@ -24,9 +24,11 @@ name: Deploy
 # person approving a prod change independently of whoever clicked
 # "Run workflow" is worth having.
 #
-# App deploy steps (OpenNext / Lambda / ECS) are TODOs — Phase 0 has no
-# application code yet. Each phase adds its own deploy step here in its
-# own PR when it adds the corresponding app.
+# App deploy steps (OpenNext / ECS) beyond api-catalog are still TODOs.
+# api-catalog builds its own deployment package (pnpm build + pnpm
+# deploy + zip — see apps/api-catalog/scripts/package-lambda.sh) as a
+# step before `terraform apply`, since terraform/environments/*/
+# api-catalog.tf reads that zip's hash directly via filebase64sha256().
 
 on:
   workflow_dispatch:
@@ -50,6 +52,15 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Build api-catalog Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-catalog
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
@@ -61,7 +72,8 @@ jobs:
         run: |
           terraform init -input=false
           terraform apply -input=false -auto-approve
-      # TODO(phase-1+): deploy OpenNext / Lambdas / ECS here, per SPEC-12
+      # TODO(phase-2+): deploy OpenNext / ECS here, per SPEC-12, following
+      # the same "build artifact, then terraform apply" shape as above.
 
   smoke-test-dev:
     needs: apply-dev
@@ -86,6 +98,15 @@ jobs:
   #   environment: qa
   #   steps:
   #     - uses: actions/checkout@v4
+  #     - uses: pnpm/action-setup@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #         cache: "pnpm"
+  #     - run: pnpm install --frozen-lockfile
+  #     - name: Build api-catalog Lambda package
+  #       run: bash scripts/package-lambda.sh
+  #       working-directory: apps/api-catalog
   #     - uses: hashicorp/setup-terraform@v3
   #       with:
   #         terraform_version: "1.9.8"
@@ -115,6 +136,15 @@ jobs:
   #   environment: prod
   #   steps:
   #     - uses: actions/checkout@v4
+  #     - uses: pnpm/action-setup@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #         cache: "pnpm"
+  #     - run: pnpm install --frozen-lockfile
+  #     - name: Build api-catalog Lambda package
+  #       run: bash scripts/package-lambda.sh
+  #       working-directory: apps/api-catalog
   #     - uses: hashicorp/setup-terraform@v3
   #       with:
   #         terraform_version: "1.9.8"

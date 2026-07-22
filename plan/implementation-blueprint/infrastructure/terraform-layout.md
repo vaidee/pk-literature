@@ -43,7 +43,11 @@ terraform/
     security-groups/       rds, rds-proxy, lambda-db, lambda-egress, ecs-directus, ecs-medusa
     rds/                  Postgres instance, subnet group, parameter group
     rds-proxy/
-    lambda/                reusable module: one instantiation per service (api-catalog, api-feed, ...)
+    lambda-service/        reusable module: one instantiation per service (api-catalog, api-feed, ...).
+                           Execution role, log group, versioning + a `live` alias (rollback.md's
+                           fast-path rollback target) — the domain-specific bits (handler, VPC
+                           placement, extra IAM permissions, API Gateway routes) live in that
+                           phase's own environments/<env>/<service>.tf, e.g. api-catalog.tf
     api-gateway/
     ecs-service/            reusable module: one instantiation for directus, one for medusa
     alb/                    Directus/Medusa admin ALBs (public subnet, HTTPS only)
@@ -76,7 +80,7 @@ above) and the `environments/<env>/` instantiation of: `vpc`,
 `s3` (base buckets), `iam` (base roles), `secrets-manager` (bootstrap
 secrets), `api-gateway` (shell, no routes yet), `cloudfront`,
 `opennext`, `eventbridge` (bus only), `cloudwatch` (base). Every later
-phase branch adds its own `lambda`/`ecs-service` module instantiations
+phase branch adds its own `lambda-service`/`ecs-service` module instantiations
 and wires them into `environments/<env>/main.tf` in its own PR — it
 does not modify `bootstrap/` or touch another phase's modules.
 
