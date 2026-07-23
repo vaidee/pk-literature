@@ -1,7 +1,12 @@
-# Phase 0 shell: media (covers/logos) origin only, since no OpenNext
-# frontend exists yet. Whichever phase adds apps/web adds a second
-# origin + repoints the default cache behavior at it, with this media
-# origin moved to a /media/* path pattern behavior instead of default.
+# Media (covers/logos) distribution only, at cdn.${domain_name}. An
+# earlier version of this comment proposed folding apps/web's OpenNext
+# origins into this same distribution once built, moving this media
+# origin to a /media/* path behavior — that turned out to mean changing
+# the URL shape every already-shipped phase (Directus config,
+# apps/api-catalog, etc.) writes into catalog.media_assets-derived
+# URLs, for no real benefit. apps/web got its own distribution instead
+# (modules/cloudfront-web, aliased at the bare domain_name) — this one
+# is unchanged.
 
 locals {
   media_origin_id = "media-s3"

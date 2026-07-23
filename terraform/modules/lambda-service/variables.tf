@@ -36,6 +36,12 @@ variable "timeout" {
   default = 10
 }
 
+variable "architectures" {
+  description = "x86_64 default matches every existing service. modules/opennext overrides this to [\"arm64\"] for the image-optimization function specifically — @opennextjs/aws builds its sharp native binary for arm64 (AWS's own recommendation for that function, and cheaper besides), and a mismatched architecture here means the deployed binary just can't load."
+  type        = list(string)
+  default     = ["x86_64"]
+}
+
 variable "environment_variables" {
   type    = map(string)
   default = {}

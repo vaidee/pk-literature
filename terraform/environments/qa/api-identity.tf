@@ -72,6 +72,13 @@ module "lambda_api_identity" {
     EVENTBRIDGE_BUS_NAME = module.eventbridge.bus_name
 
     JWT_SIGNING_SECRET_ARN = module.secrets_manager.identity_jwt_signing_secret_arn
+
+    # apps/web (bare var.domain_name) and this API (api.${var.domain_name})
+    # are sibling subdomains — a leading-dot domain scopes the auth
+    # cookies this Lambda sets to the whole family instead of just
+    # api.${var.domain_name}, which is what apps/web's server-side
+    # fetches (server-fetch.ts) need to actually see them.
+    COOKIE_DOMAIN = ".${var.domain_name}"
   }
 
   additional_policy_json = data.aws_iam_policy_document.api_identity_task.json
