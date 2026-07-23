@@ -1,5 +1,12 @@
 output "db_instance_id" {
-  value = aws_db_instance.this.id
+  # NOT .id — for aws_db_instance, .id resolves to the DbiResourceId
+  # ("db-XXXXXXXXXXXX...", the same value as .resource_id below), not
+  # the human-assigned identifier. Every consumer of this output
+  # (rds-proxy's db_instance_identifier, cloudwatch's DBInstanceIdentifier
+  # alarm dimension) needs the actual identifier string — confirmed by a
+  # real apply failure: "only lowercase alphanumeric characters and
+  # hyphens allowed in db_instance_identifier" when this was .id.
+  value = aws_db_instance.this.identifier
 }
 
 output "db_instance_arn" {
