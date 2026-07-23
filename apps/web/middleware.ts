@@ -18,7 +18,20 @@ import { NextResponse, type NextRequest } from "next/server";
 // which isn't worth the layer for what it protects here.
 const ANONYMOUS_ID_COOKIE = "anonymous_id";
 
+// Pre-launch placeholder: COMING_SOON_MODE is a plain Lambda runtime env
+// var (terraform/environments/prod/web.tf), not a NEXT_PUBLIC_* build-time
+// one — toggling it is a `terraform apply` away, no rebuild/redeploy of
+// apps/web itself. Site-wide (every route rewrites to the same page)
+// rather than home-page-only: there's no real inventory to browse to
+// yet, so leaving search/cart/book-detail reachable would just surface
+// an empty catalog.
+const COMING_SOON_PATH = "/coming-soon";
+
 export function middleware(request: NextRequest): NextResponse {
+  if (process.env.COMING_SOON_MODE === "true" && request.nextUrl.pathname !== COMING_SOON_PATH) {
+    return NextResponse.rewrite(new URL(COMING_SOON_PATH, request.url));
+  }
+
   const response = NextResponse.next();
 
   if (!request.cookies.get(ANONYMOUS_ID_COOKIE)) {
