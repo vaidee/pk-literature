@@ -25,7 +25,8 @@ module "opennext" {
   server_zip_path = local.web_server_zip
   server_zip_hash = filebase64sha256(local.web_server_zip)
   server_environment_variables = {
-    API_BASE_URL = "https://api.${var.domain_name}/v1"
+    API_BASE_URL     = "https://api.${var.domain_name}/v1"
+    COMING_SOON_MODE = var.coming_soon_mode ? "true" : "false"
   }
 
   image_zip_path = local.web_image_zip

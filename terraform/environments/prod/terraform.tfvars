@@ -17,3 +17,7 @@ existing_private_isolated_subnet_ids     = ["subnet-0ead7c717e0f7ef8e", "subnet-
 existing_private_nat_subnet_ids          = ["subnet-010564041584b7678", "subnet-05526ae30e111671f"] # REPLACE before first apply
 existing_private_isolated_route_table_id = "rtb-0e792ed2933373427"                                  # REPLACE before first apply
 existing_nat_gateway_ids                 = []                                                       # optional — see variables.tf
+
+# Flip to false (then `terraform apply`) once real inventory is
+# populated and the storefront is ready for traffic — see variables.tf.
+coming_soon_mode = true

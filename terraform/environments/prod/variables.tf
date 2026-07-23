@@ -89,3 +89,9 @@ variable "medusa_image_tag" {
   type        = string
   default     = "2.17.2"
 }
+
+variable "coming_soon_mode" {
+  description = "Gates every apps/web route behind a static 'opening soon' page (middleware.ts) until real inventory is populated. Defaults on for a fresh launch — flip to false in terraform.tfvars once ready, no apps/web rebuild needed since this is a plain Lambda runtime env var, not a NEXT_PUBLIC_* build-time one."
+  type        = bool
+  default     = true
+}
