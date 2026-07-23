@@ -87,7 +87,8 @@ module "lambda_api_commerce" {
     RAZORPAY_WEBHOOK_SECRET_SECRET_ARN = module.secrets_manager.razorpay_webhook_secret_secret_arn
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_commerce_task.json
+  additional_policy_json   = data.aws_iam_policy_document.api_commerce_task.json
+  attach_additional_policy = true
 }
 
 resource "aws_apigatewayv2_integration" "api_commerce" {
@@ -221,7 +222,8 @@ module "lambda_api_commerce_user_registered_consumer" {
     AWS_REGION   = data.aws_region.current.name
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_commerce_user_registered_consumer_task.json
+  additional_policy_json   = data.aws_iam_policy_document.api_commerce_user_registered_consumer_task.json
+  attach_additional_policy = true
 }
 
 resource "aws_cloudwatch_event_rule" "user_registered" {

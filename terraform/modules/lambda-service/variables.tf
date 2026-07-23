@@ -68,3 +68,9 @@ variable "additional_policy_json" {
   type        = string
   default     = null
 }
+
+variable "attach_additional_policy" {
+  description = "Whether to create the additional-permissions role policy. A separate literal flag from additional_policy_json itself — see main.tf's additional resource comment for why: the JSON content can be unknown-until-apply, but this decision can't be if count depends on it."
+  type        = bool
+  default     = false
+}

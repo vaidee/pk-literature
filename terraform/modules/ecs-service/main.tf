@@ -58,7 +58,20 @@ resource "aws_iam_role" "task" {
 }
 
 resource "aws_iam_role_policy" "task_additional" {
-  count = var.additional_policy_json != null ? 1 : 0
+  # Deliberately gated on the caller-supplied literal boolean, not on
+  # `var.additional_policy_json != null`: every real caller's policy
+  # document references module.rds_proxy.iam_auth_resource_id (an
+  # output derived from aws_db_proxy.this.arn), which is unknown until
+  # the proxy is actually created. On a first-ever apply that makes the
+  # whole `.json` value "known after apply," and Terraform can't
+  # evaluate `!= null` against an unknown value at plan time — it
+  # rejects the count argument outright ("Invalid count argument...
+  # depends on resource attributes that cannot be determined until
+  # apply"), even though every caller always supplies a real document.
+  # var.attach_additional_policy is a plain literal `true`/`false` set
+  # by the caller, so it's always known at plan time regardless of
+  # what the policy content itself depends on.
+  count = var.attach_additional_policy ? 1 : 0
 
   name   = "additional-permissions"
   role   = aws_iam_role.task.id

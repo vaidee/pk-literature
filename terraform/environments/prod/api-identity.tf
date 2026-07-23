@@ -81,7 +81,8 @@ module "lambda_api_identity" {
     COOKIE_DOMAIN = ".${var.domain_name}"
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_identity_task.json
+  additional_policy_json   = data.aws_iam_policy_document.api_identity_task.json
+  attach_additional_policy = true
 }
 
 resource "aws_apigatewayv2_integration" "api_identity" {

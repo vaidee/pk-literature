@@ -100,5 +100,6 @@ module "ecs_directus" {
     ADMIN_PASSWORD = module.secrets_manager.directus_admin_password_secret_arn
   }
 
-  additional_policy_json = data.aws_iam_policy_document.directus_task.json
+  additional_policy_json   = data.aws_iam_policy_document.directus_task.json
+  attach_additional_policy = true
 }

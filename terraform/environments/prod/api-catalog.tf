@@ -61,7 +61,8 @@ module "lambda_api_catalog" {
     CDN_BASE_URL = "https://cdn.${var.domain_name}"
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_catalog_rds_connect.json
+  additional_policy_json   = data.aws_iam_policy_document.api_catalog_rds_connect.json
+  attach_additional_policy = true
 }
 
 # --- API Gateway wiring ---

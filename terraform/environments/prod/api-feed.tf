@@ -56,7 +56,8 @@ module "lambda_api_feed" {
     FEATURE_PERSONALIZED_SHELVES = "false"
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_feed_rds_connect.json
+  additional_policy_json   = data.aws_iam_policy_document.api_feed_rds_connect.json
+  attach_additional_policy = true
 }
 
 resource "aws_apigatewayv2_integration" "api_feed" {
