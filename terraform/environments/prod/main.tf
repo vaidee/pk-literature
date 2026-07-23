@@ -28,9 +28,20 @@ module "route53_acm" {
 module "vpc" {
   source = "../../modules/vpc"
 
-  environment        = "prod"
-  azs                = var.azs
-  single_nat_gateway = true # infrastructure/networking.md — single NAT to start, all envs
+  environment = "prod"
+  azs         = var.azs
+
+  # Reusing this AWS account's existing VPC instead of provisioning a
+  # new one — see variables.tf's existing_* variables (REPLACE their
+  # placeholders before first apply) and modules/vpc's create_vpc
+  # variable for the full rationale.
+  create_vpc                               = false
+  existing_vpc_id                          = var.existing_vpc_id
+  existing_public_subnet_ids               = var.existing_public_subnet_ids
+  existing_private_isolated_subnet_ids     = var.existing_private_isolated_subnet_ids
+  existing_private_nat_subnet_ids          = var.existing_private_nat_subnet_ids
+  existing_private_isolated_route_table_id = var.existing_private_isolated_route_table_id
+  existing_nat_gateway_ids                 = var.existing_nat_gateway_ids
 }
 
 module "security_groups" {

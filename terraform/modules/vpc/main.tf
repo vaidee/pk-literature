@@ -5,8 +5,19 @@
 # publisher-import Lambdas, plus Directus ECS); private-nat is only for
 # things with a genuine reason to reach the public internet (Commerce
 # Lambda, Medusa ECS — both call Razorpay).
+#
+# Every resource below is gated on var.create_vpc so this module can
+# also run in "reuse an existing VPC" mode (variables.tf) without
+# touching any downstream module — see that variable's own comment.
+
+data "aws_vpc" "existing" {
+  count = var.create_vpc ? 0 : 1
+  id    = var.existing_vpc_id
+}
 
 resource "aws_vpc" "this" {
+  count = var.create_vpc ? 1 : 0
+
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
@@ -18,7 +29,9 @@ resource "aws_vpc" "this" {
 }
 
 resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
+  count = var.create_vpc ? 1 : 0
+
+  vpc_id = aws_vpc.this[0].id
 
   tags = {
     Name        = "pk-literature-${var.environment}-igw"
@@ -29,9 +42,9 @@ resource "aws_internet_gateway" "this" {
 # --- Public subnets (NAT Gateway ENI + Directus/Medusa admin ALBs only) ---
 
 resource "aws_subnet" "public" {
-  for_each = { for idx, az in var.azs : az => idx }
+  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
 
-  vpc_id                  = aws_vpc.this.id
+  vpc_id                  = aws_vpc.this[0].id
   availability_zone       = each.key
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, each.value)
   map_public_ip_on_launch = true
@@ -44,11 +57,13 @@ resource "aws_subnet" "public" {
 }
 
 resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.this.id
+  count = var.create_vpc ? 1 : 0
+
+  vpc_id = aws_vpc.this[0].id
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this.id
+    gateway_id = aws_internet_gateway.this[0].id
   }
 
   tags = {
@@ -61,13 +76,13 @@ resource "aws_route_table_association" "public" {
   for_each = aws_subnet.public
 
   subnet_id      = each.value.id
-  route_table_id = aws_route_table.public.id
+  route_table_id = aws_route_table.public[0].id
 }
 
 # --- NAT Gateway(s) — single by default (infrastructure/networking.md) ---
 
 resource "aws_eip" "nat" {
-  for_each = var.single_nat_gateway ? { (var.azs[0]) = 0 } : { for idx, az in var.azs : az => idx }
+  for_each = var.create_vpc ? (var.single_nat_gateway ? { (var.azs[0]) = 0 } : { for idx, az in var.azs : az => idx }) : {}
 
   domain = "vpc"
 
@@ -94,9 +109,9 @@ resource "aws_nat_gateway" "this" {
 # --- Private-isolated subnets (NO route to NAT or IGW) ---
 
 resource "aws_subnet" "private_isolated" {
-  for_each = { for idx, az in var.azs : az => idx }
+  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
 
-  vpc_id            = aws_vpc.this.id
+  vpc_id            = aws_vpc.this[0].id
   availability_zone = each.key
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, 10 + each.value)
 
@@ -111,7 +126,9 @@ resource "aws_subnet" "private_isolated" {
 # VPC route Terraform/AWS adds implicitly. Its emptiness (no 0.0.0.0/0
 # route at all) is the actual security property, not a config to tune.
 resource "aws_route_table" "private_isolated" {
-  vpc_id = aws_vpc.this.id
+  count = var.create_vpc ? 1 : 0
+
+  vpc_id = aws_vpc.this[0].id
 
   tags = {
     Name        = "pk-literature-${var.environment}-private-isolated"
@@ -123,15 +140,15 @@ resource "aws_route_table_association" "private_isolated" {
   for_each = aws_subnet.private_isolated
 
   subnet_id      = each.value.id
-  route_table_id = aws_route_table.private_isolated.id
+  route_table_id = aws_route_table.private_isolated[0].id
 }
 
 # --- Private-NAT subnets (Commerce Lambda, Medusa ECS — Razorpay calls) ---
 
 resource "aws_subnet" "private_nat" {
-  for_each = { for idx, az in var.azs : az => idx }
+  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
 
-  vpc_id            = aws_vpc.this.id
+  vpc_id            = aws_vpc.this[0].id
   availability_zone = each.key
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, 20 + each.value)
 
@@ -143,9 +160,9 @@ resource "aws_subnet" "private_nat" {
 }
 
 resource "aws_route_table" "private_nat" {
-  for_each = { for idx, az in var.azs : az => idx }
+  for_each = aws_subnet.private_nat
 
-  vpc_id = aws_vpc.this.id
+  vpc_id = aws_vpc.this[0].id
 
   route {
     cidr_block     = "0.0.0.0/0"
