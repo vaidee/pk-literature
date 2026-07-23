@@ -1,2 +1,253 @@
 # Deploy
-Operational runbook.
+
+Operational runbook for taking `dev` from nothing to a running
+environment, and for routine deploys after that. `qa`/`prod` follow the
+same shape once their `terraform-apply.yml` jobs are uncommented
+(`development/branching.md`'s "each phase owns its own infra" —
+nothing environment-specific changes except which job runs).
+
+This is written from a real pre-deploy audit of everything currently in
+`main` (all of Phases 0–7) — every step below reflects what the code
+and Terraform actually require, not an idealized process. Section 6 is
+an open gap, not a solved problem — read it before you start.
+
+---
+
+## 1. One-time account setup: `terraform/bootstrap`
+
+Applied once, manually, by a human with admin AWS credentials — never
+by CI (`terraform/bootstrap/README.md`).
+
+```sh
+cd terraform/bootstrap
+terraform init
+terraform plan
+terraform apply
+```
+
+Before running this:
+
+- **`state_bucket_name`** (`terraform/bootstrap/variables.tf`, default
+  `pk-literature-terraform-state`) must be globally unique across every
+  AWS account, not just this one. Confirm it's free, or pass a
+  different value, before the first apply — it cannot be changed
+  afterward without a state migration.
+
+After it applies, take its outputs and wire them in by hand:
+
+1. `gha_deploy_role_arns` → GitHub repo/environment variables
+   `AWS_DEPLOY_ROLE_ARN_DEV` (and `_QA`/`_PROD` once those jobs are
+   uncommented in `.github/workflows/terraform-apply.yml`).
+2. `state_bucket_name` / `state_lock_table_name` → confirm they match
+   what's already hardcoded in each `terraform/environments/<env>/backend.tf`
+   (they should, since both sides use the same defaults — this is a
+   sanity check, not a copy step, unless you changed the bootstrap
+   variable above).
+3. `gha_publisher_import_role_arns` → `AWS_PUBLISHER_IMPORT_ROLE_ARN_DEV`
+   (repo/environment variable, read by `.github/workflows/publisher-import.yml`).
+
+From this point on, `terraform/environments/` is applied by CI
+(`terraform-apply.yml`, `workflow_dispatch`-gated), never manually —
+see that workflow's own header comment for why.
+
+---
+
+## 2. Fill in placeholders before the first `environments/dev` apply
+
+- **`terraform/environments/{dev,qa,prod}/terraform.tfvars`** —
+  `domain_name` and `alarm_email` are placeholders
+  (`dev.pk-literature.example`, `alerts+dev@pk-literature.example`,
+  etc.), each marked `REPLACE before first apply` in the file itself.
+  `create_hosted_zone = true` assumes Route 53 doesn't already own this
+  domain's zone; set it `false` and reuse an existing zone if it does.
+- **GitHub Actions variables** (repo or `dev` environment scope):
+  `AWS_DEPLOY_ROLE_ARN_DEV`, `AWS_PUBLISHER_IMPORT_ROLE_ARN_DEV`,
+  `KALACHUVADU_BASE_URL`, `STAGING_INGEST_BASE_URL_DEV` (the last one
+  is only known after the first apply — see step 4).
+
+---
+
+## 3. First apply: `terraform-apply.yml`
+
+Manual `workflow_dispatch` only — merging to `main` never triggers an
+apply by itself (`terraform-apply.yml`'s own header explains why this
+is the primary safety gate). The workflow already builds every Lambda's
+deployment package before running `terraform apply` (`api-catalog`,
+`api-publisher-import`, `api-feed`, `api-search`, `api-commerce`,
+`api-identity`, in that order) — you don't need to build anything by
+hand for this step.
+
+This creates: VPC + subnets + NAT, RDS + RDS Proxy, S3, CloudFront,
+the API Gateway shell + every phase's routes, EventBridge bus + the
+`UserRegistered` rule, all 8 Lambda functions, Secrets Manager entries,
+and the shared ECS cluster (empty — see step 5).
+
+**What this step does NOT do**: run any database migration, put a
+Directus or Medusa image in ECR, or set a real Razorpay credential.
+Every Lambda will exist but return 500s against a database with no
+schemas until step 4 runs.
+
+---
+
+## 4. Run migrations against the real RDS instance
+
+**This is the one genuinely unresolved piece of this runbook — read
+this whole section before your first real deploy.**
+
+RDS is deliberately unreachable from anywhere outside the VPC:
+`publicly_accessible = false`, and it sits in the `private-isolated`
+subnet tier, which has **no route to a NAT Gateway or an Internet
+Gateway at all** (`infrastructure/networking.md`). A GitHub
+Actions-hosted runner cannot reach it, full stop — there is no amount
+of security-group tweaking that fixes this, since it's a routing
+problem, not a firewall problem. There is also no SSM
+(`ssmmessages`/`ec2messages`) VPC endpoint, no bastion host, and no
+ECS one-off task or Lambda-based migration runner anywhere in this
+repo today. Every migration `.sql` file in this repo has been tested
+thoroughly against real local Postgres (see each phase's PR
+description) but **never against a real deployed RDS instance**,
+because nothing in this repo can currently reach one.
+
+Each service owns its own migrations and runs them independently
+against the RDS **master credential** (`/pk-literature/<env>/rds/master`
+in Secrets Manager — Terraform/migration-runner bootstrap only, never
+used by the app roles themselves, `infrastructure/secrets.md`):
+
+```sh
+# from inside the VPC, once you have a path in — see options below
+cd apps/api-catalog   && pnpm migrate:up
+cd apps/api-feed       && pnpm migrate:up
+cd apps/api-search     && pnpm migrate:up
+cd apps/api-commerce   && pnpm migrate:up
+cd apps/api-identity   && pnpm migrate:up
+```
+
+(`api-publisher-import` has no migrations of its own — its DB role is
+created by `api-catalog`'s migrations, since `api-catalog` owns the
+`staging`/`catalog` schemas it grants access to.)
+
+**Options to actually get a path into the VPC** (pick one — none of
+these are wired up yet, this is a decision to make, not a step to
+follow):
+
+1. **SSM port-forwarding through a throwaway instance.** Add the
+   `ssmmessages`/`ec2messages`/`ssm` interface endpoints to
+   `terraform/modules/vpc-endpoints`, launch a tiny EC2 instance (or a
+   one-off Fargate task with the SSM agent) in a private subnet with
+   the `lambda_db_sg` security group, `aws ssm start-session` with
+   `--document-name AWS-StartPortForwardingClient` to tunnel local
+   `5432` to the RDS Proxy endpoint, run migrations from your laptop
+   against `localhost:5432`, tear the instance down. No public IP, no
+   SSH key, no bastion security group ever open to `0.0.0.0/0`.
+2. **A one-off ECS Fargate task**, same image concept as
+   `apps/directus`/`apps/medusa` but running `node-pg-migrate` instead
+   of a long-lived server — `aws ecs run-task` from CI (which *can*
+   reach the AWS API even though it can't reach the VPC directly),
+   using the existing `ecs-service` module's IAM/networking patterns
+   but a `run-task`-style invocation instead of a persistent service.
+3. **A dedicated migration-runner Lambda**, invoked once via `aws lambda
+   invoke` from CI after every apply — packages each service's
+   `migrations/` directory and runs `node-pg-migrate` inside the Lambda
+   execution environment (which *is* inside the VPC, unlike the CI
+   runner). Closest in shape to what already exists (`lambda-service`
+   module), but is a genuinely new Lambda, not a repurposing of an
+   existing one — none of the 8 app Lambdas should run migrations as a
+   side effect of a normal invocation.
+
+Whichever of these you pick, update this section once it exists —
+right now it correctly describes a gap, not a mechanism.
+
+---
+
+## 5. Directus and Medusa images
+
+Both ECR repos (`pk-literature/directus`, `pk-literature/medusa`) are
+empty until you explicitly run their build workflows —
+`terraform-apply.yml` never builds or pushes these, on purpose (see
+its own header comment). The ECS services from step 3 will apply
+successfully either way; tasks just won't start until an image with
+the tag `directus_image_tag`/`medusa_image_tag` (`environments/<env>/variables.tf`,
+currently `11.17.4`/`2.17.2`) exists in ECR.
+
+```
+# GitHub Actions → Build Directus Image → Run workflow (directus_version input)
+# GitHub Actions → Build Medusa Image   → Run workflow (medusa_image_tag input)
+```
+
+Both are `workflow_dispatch`-only, both skip the push if that tag
+already exists (repos are `IMMUTABLE`). See `apps/directus/README.md`'s
+"Known issue" and `apps/medusa/README.md`'s "Known issue"/"Scope
+boundary" sections before assuming either comes up healthy on the
+first try — neither has been boot-verified against a live instance;
+Directus specifically crashed on first-boot migration in this
+project's sandbox for reasons that may or may not reproduce on real
+RDS Postgres (documented there, not solved here).
+
+---
+
+## 6. Secrets that need a real value
+
+Everything in Secrets Manager is Terraform-generated *except*:
+
+| Secret | Path | Why it's not auto-generated |
+|---|---|---|
+| Razorpay key ID | `/<env>/razorpay/key-id` | Issued by Razorpay's dashboard |
+| Razorpay key secret | `/<env>/razorpay/key-secret` | Issued by Razorpay's dashboard |
+| Razorpay webhook secret | `/<env>/razorpay/webhook-secret` | Issued by Razorpay's dashboard (webhook config) |
+
+These start as `random_password`-generated placeholders with
+`lifecycle { ignore_changes = [secret_string] }` — Terraform will never
+overwrite a real value you paste in via the AWS Console/CLI, but
+checkout/payments will not work against the real Razorpay API until
+you do. Directus/Medusa's own secrets (DB password, `KEY`/`SECRET`,
+JWT/cookie secrets, admin passwords) and `identity/jwt-signing-secret`
+are all genuinely Terraform-generated and need no manual step.
+
+Grant `rds_iam` to every IAM-auth DB role — this only exists on real
+RDS, so it's not part of any migration and must be run once per
+environment after step 4's migrations have created the roles:
+
+```sql
+GRANT rds_iam TO catalog_api_readonly;
+GRANT rds_iam TO publisher_import_writer;
+GRANT rds_iam TO feed_api_rw;
+GRANT rds_iam TO search_api_readonly;
+GRANT rds_iam TO commerce_api_rw;
+GRANT rds_iam TO identity_api_rw;
+```
+
+(`directus_app` and `medusa_app` don't need this — they use stored
+passwords, not RDS Proxy IAM auth; `infrastructure/secrets.md`'s
+documented exception.)
+
+---
+
+## 7. Smoke test
+
+No dedicated smoke-test suite exists yet beyond the placeholder job in
+`terraform-apply.yml` (`smoke-test-dev`, currently just an `echo`). A
+reasonable manual check after steps 1–6:
+
+- `GET https://api.<domain>/v1/health` (routed to `api-catalog`)
+- `GET https://api.<domain>/v1/feed`
+- `GET https://api.<domain>/v1/search?q=...`
+- `POST https://api.<domain>/v1/cart` with an `X-Anonymous-Id` header,
+  then `GET` it back
+- `POST https://api.<domain>/v1/auth/register`, then `GET /v1/profile`
+  with the returned cookie
+- `https://directus.<domain>` and `https://medusa.<domain>` load their
+  respective admin login screens
+
+---
+
+## Routine deploys after the first one
+
+Once steps 1–2 are done once, a normal deploy is: merge to `main` →
+manually run `terraform-apply.yml` (`workflow_dispatch`, `dev`) → if a
+migration was added in this change, run it (step 4's mechanism,
+whichever was chosen) → if `directus_image_tag`/`medusa_image_tag`
+changed, run the corresponding build-image workflow first. `qa`/`prod`
+are not part of this loop yet — their jobs in `terraform-apply.yml` are
+commented out until someone deliberately re-enables them (see that
+file's own comment for the required GitHub Environment reviewer setup
+first).
