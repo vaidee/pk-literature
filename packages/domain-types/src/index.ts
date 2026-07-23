@@ -8,3 +8,4 @@ export * from "./collection";
 export * from "./inventory";
 export * from "./book";
 export * from "./feed";
+export * from "./search";
