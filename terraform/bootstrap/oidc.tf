@@ -33,6 +33,16 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 # to provide before the dev/qa environments were dropped from CI — see
 # git history if multi-environment is ever revisited).
 #
+# prod also includes "environment:prod" separately from
+# "ref:refs/heads/main": any job that sets a top-level `environment:`
+# key (terraform-apply.yml does, for its required-reviewers approval
+# gate) gets an OIDC token whose sub claim is
+# "repo:OWNER/REPO:environment:ENV_NAME" instead of the ref-based form
+# — GitHub swaps in the environment claim, it doesn't add it alongside
+# the ref one. Confirmed against a real terraform-apply run that failed
+# AssumeRoleWithWebIdentity even after the ref/pull_request values above
+# were already correct and applied.
+#
 # Real tradeoff, not a free lunch: this means any PR opened against
 # vaidee/pk-literature can assume gha-deploy-prod during that workflow
 # run — which has broad permissions (gha_deploy_permissions below), not
@@ -44,7 +54,7 @@ locals {
   deploy_role_trusted_refs = {
     dev  = ["ref:refs/heads/*", "pull_request"] # any branch/PR may plan+apply dev
     qa   = ["ref:refs/heads/main"]
-    prod = ["ref:refs/heads/main", "pull_request"]
+    prod = ["ref:refs/heads/main", "pull_request", "environment:prod"]
   }
 }
 
