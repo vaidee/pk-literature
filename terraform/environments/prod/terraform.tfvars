@@ -2,11 +2,11 @@
 # apply. Sizing/safety flags are prod-specific (see main.tf header
 # comment and infrastructure/cost-estimation.md).
 
-aws_region         = "ap-south-1"
+aws_region         = "ap-southeast-1"
 domain_name        = "pk-literature.example" # REPLACE before first apply
 create_hosted_zone = true
 alarm_email        = "alerts@pk-literature.example" # REPLACE before first apply
-azs                = ["ap-south-1a", "ap-south-1b"]
+azs                = ["ap-southeast-1a", "ap-southeast-1b"]
 
 # Reusing this account's existing VPC (modules/vpc's create_vpc = false
 # mode, main.tf) instead of provisioning a new one — see

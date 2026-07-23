@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "Primary AWS region for the account."
   type        = string
-  default     = "ap-south-1"
+  default     = "ap-southeast-1"
 }
 
 variable "state_bucket_name" {
