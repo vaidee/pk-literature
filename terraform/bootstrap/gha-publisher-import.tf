@@ -26,8 +26,12 @@ data "aws_iam_policy_document" "gha_publisher_import_assume_role" {
   for_each = toset(var.environments)
 
   statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect = "Allow"
+    # Same sts:TagSession requirement as oidc.tf's gha_deploy_assume_role
+    # — aws-actions/configure-aws-credentials@v4 attaches session tags
+    # by default, and AWS rejects the whole AssumeRoleWithWebIdentity
+    # call (not a separate error) if that action isn't also granted.
+    actions = ["sts:AssumeRoleWithWebIdentity", "sts:TagSession"]
 
     principals {
       type        = "Federated"
