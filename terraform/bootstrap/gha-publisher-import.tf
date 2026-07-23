@@ -15,10 +15,17 @@ locals {
   # oidc.tf's deploy_role_trusted_refs, and for the same reason: allow
   # testing a phase branch's crawler workflow against dev before merge,
   # but never run the scheduled/production crawl from anything but main.
+  #
+  # prod includes "environment:prod" for the same reason as
+  # oidc.tf's deploy_role_trusted_refs.prod: publisher-import.yml's
+  # import-prod job sets a top-level `environment: prod` key, which
+  # swaps the OIDC token's sub claim to the environment-scoped form
+  # ("repo:OWNER/REPO:environment:prod") instead of the ref-based one
+  # — see that comment for the full explanation.
   publisher_import_trusted_refs = {
     dev  = ["ref:refs/heads/*", "pull_request"]
     qa   = ["ref:refs/heads/main"]
-    prod = ["ref:refs/heads/main"]
+    prod = ["ref:refs/heads/main", "environment:prod"]
   }
 }
 
