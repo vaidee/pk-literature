@@ -44,13 +44,17 @@ data "aws_iam_policy_document" "gha_publisher_import_assume_role" {
       values   = ["sts.amazonaws.com"]
     }
 
+    # Same "immutable ID" subject-claim format as oidc.tf's
+    # gha_deploy_assume_role — see that condition's comment.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        for ref in local.publisher_import_trusted_refs[each.value] :
-        "repo:${var.github_org}/${var.github_repo}:${ref}"
-      ]
+      values = flatten([
+        for ref in local.publisher_import_trusted_refs[each.value] : [
+          "repo:${var.github_org}/${var.github_repo}:${ref}",
+          "repo:${var.github_org}@*/${var.github_repo}@*:${ref}",
+        ]
+      ])
     }
   }
 }
