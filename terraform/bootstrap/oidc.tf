@@ -52,8 +52,18 @@ data "aws_iam_policy_document" "gha_deploy_assume_role" {
   for_each = toset(var.environments)
 
   statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect = "Allow"
+    # aws-actions/configure-aws-credentials@v4 attaches session tags
+    # (repository/actor/workflow/ref/etc.) to the AssumeRoleWithWebIdentity
+    # call by default — AWS evaluates that as one combined request, and
+    # without sts:TagSession also granted here, the whole call is
+    # rejected with the same generic "not authorized to perform
+    # sts:AssumeRoleWithWebIdentity" error (no separate TagSession
+    # error surfaced), even when every trust-policy condition below is
+    # otherwise satisfied. Confirmed against a real failing run whose
+    # debug log showed "7 role session tags are being used" right
+    # before the rejection.
+    actions = ["sts:AssumeRoleWithWebIdentity", "sts:TagSession"]
 
     principals {
       type        = "Federated"
