@@ -9,7 +9,7 @@
 resource "aws_security_group" "rds" {
   name_prefix = "pk-literature-${var.environment}-rds-"
   vpc_id      = var.vpc_id
-  description = "RDS PostgreSQL — inbound only from RDS Proxy"
+  description = "RDS PostgreSQL - inbound only from RDS Proxy"
 
   tags = {
     Name        = "pk-literature-${var.environment}-rds"
@@ -24,7 +24,7 @@ resource "aws_security_group" "rds" {
 resource "aws_security_group" "rds_proxy" {
   name_prefix = "pk-literature-${var.environment}-rds-proxy-"
   vpc_id      = var.vpc_id
-  description = "RDS Proxy — inbound only from Lambda/ECS needing DB access"
+  description = "RDS Proxy - inbound only from Lambda/ECS needing DB access"
 
   tags = {
     Name        = "pk-literature-${var.environment}-rds-proxy"
@@ -54,7 +54,7 @@ resource "aws_security_group" "lambda_db" {
 resource "aws_security_group" "lambda_egress" {
   name_prefix = "pk-literature-${var.environment}-lambda-egress-"
   vpc_id      = var.vpc_id
-  description = "Attached to private-nat-tier Lambdas (Commerce) needing internet egress — outbound 443 only"
+  description = "Attached to private-nat-tier Lambdas (Commerce) needing internet egress - outbound 443 only"
 
   tags = {
     Name        = "pk-literature-${var.environment}-lambda-egress"
@@ -69,7 +69,7 @@ resource "aws_security_group" "lambda_egress" {
 resource "aws_security_group" "vpc_endpoints" {
   name_prefix = "pk-literature-${var.environment}-vpc-endpoints-"
   vpc_id      = var.vpc_id
-  description = "Interface VPC endpoints (Secrets Manager, EventBridge, CloudWatch Logs) — inbound 443 from the private-isolated tier"
+  description = "Interface VPC endpoints (Secrets Manager, EventBridge, CloudWatch Logs) - inbound 443 from the private-isolated tier"
 
   tags = {
     Name        = "pk-literature-${var.environment}-vpc-endpoints"
@@ -173,7 +173,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_db" {
 resource "aws_security_group" "alb_admin" {
   name_prefix = "pk-literature-${var.environment}-alb-admin-"
   vpc_id      = var.vpc_id
-  description = "Admin ALB (Directus, Medusa) — public HTTPS ingress only"
+  description = "Admin ALB (Directus, Medusa) - public HTTPS ingress only"
 
   tags = {
     Name        = "pk-literature-${var.environment}-alb-admin"
@@ -188,7 +188,7 @@ resource "aws_security_group" "alb_admin" {
 resource "aws_security_group" "ecs_directus" {
   name_prefix = "pk-literature-${var.environment}-ecs-directus-"
   vpc_id      = var.vpc_id
-  description = "Directus ECS task — inbound only from the admin ALB"
+  description = "Directus ECS task - inbound only from the admin ALB"
 
   tags = {
     Name        = "pk-literature-${var.environment}-ecs-directus"
@@ -206,7 +206,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_admin_from_internet" {
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
-  description       = "HTTPS from the internet — editorial users only reach this via Directus's own auth"
+  description       = "HTTPS from the internet - editorial users only reach this via Directus's own auth"
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_admin_to_ecs_directus" {
@@ -262,7 +262,7 @@ resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_vpc_endpoints" {
 resource "aws_security_group" "ecs_medusa" {
   name_prefix = "pk-literature-${var.environment}-ecs-medusa-"
   vpc_id      = var.vpc_id
-  description = "Medusa ECS task — inbound from the admin ALB, outbound internet egress for Razorpay"
+  description = "Medusa ECS task - inbound from the admin ALB, outbound internet egress for Razorpay"
 
   tags = {
     Name        = "pk-literature-${var.environment}-ecs-medusa"
