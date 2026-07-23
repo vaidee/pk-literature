@@ -7,8 +7,19 @@
 # Directus's ECS task is the first thing in the isolated tier that
 # needs to pull a container image (Lambda deployment packages don't go
 # through ECR at all, so nothing needed this before now).
+#
+# var.create_endpoints = false reuses a set of pre-existing endpoints
+# instead of creating these — needed the first time this module ran
+# against a reused (not freshly-created) VPC that already had all six
+# of these from an earlier, unrelated project. AWS allows only one
+# private-DNS-enabled interface endpoint per service per VPC, so
+# creating a second one isn't an option once any exist; a real apply
+# against this account confirmed both the gateway-endpoint route
+# conflict and the interface-endpoint private-DNS conflict.
 
 resource "aws_vpc_endpoint" "s3" {
+  count = var.create_endpoints ? 1 : 0
+
   vpc_id            = var.vpc_id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
@@ -31,7 +42,7 @@ locals {
 }
 
 resource "aws_vpc_endpoint" "interface" {
-  for_each = toset(local.interface_endpoint_services)
+  for_each = var.create_endpoints ? toset(local.interface_endpoint_services) : toset([])
 
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.aws_region}.${each.value}"
@@ -44,4 +55,32 @@ resource "aws_vpc_endpoint" "interface" {
     Name        = "pk-literature-${var.environment}-${each.value}"
     Environment = var.environment
   }
+}
+
+locals {
+  # Every (existing endpoint security group, consumer security group)
+  # pair that needs a new ingress rule when reusing endpoints this
+  # config doesn't own. Empty when create_endpoints = true — nothing
+  # to grant, the endpoints created above already have
+  # var.endpoint_security_group_id attached directly.
+  existing_endpoint_ingress_pairs = var.create_endpoints ? {} : {
+    for pair in setproduct(var.existing_interface_endpoint_sg_ids, var.consumer_security_group_ids) :
+    "${pair[0]}-${pair[1]}" => { endpoint_sg_id = pair[0], consumer_sg_id = pair[1] }
+  }
+}
+
+# Additive only — grants var.consumer_security_group_ids inbound 443 on
+# each pre-existing endpoint security group, without importing or
+# otherwise managing that security group or its other rules (e.g.
+# whatever the original project that created these endpoints already
+# has permitted stays untouched).
+resource "aws_vpc_security_group_ingress_rule" "existing_endpoint_access" {
+  for_each = local.existing_endpoint_ingress_pairs
+
+  security_group_id            = each.value.endpoint_sg_id
+  referenced_security_group_id = each.value.consumer_sg_id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS from pk-literature (reused VPC endpoint, not owned by this Terraform config)"
 }

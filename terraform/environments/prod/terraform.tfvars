@@ -18,6 +18,12 @@ existing_private_nat_subnet_ids          = ["subnet-010564041584b7678", "subnet-
 existing_private_isolated_route_table_id = "rtb-0e792ed2933373427"                                  # REPLACE before first apply
 existing_nat_gateway_ids                 = []                                                       # optional — see variables.tf
 
+# This reused VPC already has secretsmanager/events/logs/ecr.api/ecr.dkr
+# interface endpoints from an earlier, unrelated project (main.tf's
+# create_endpoints = false) — these are their security groups, found via
+# `aws ec2 describe-vpc-endpoints`.
+existing_interface_endpoint_sg_ids = ["sg-0893b4a98e0b5a7c9", "sg-03e60ba1e04d0d268"]
+
 # Flip to false (then `terraform apply`) once real inventory is
 # populated and the storefront is ready for traffic — see variables.tf.
 coming_soon_mode = true
