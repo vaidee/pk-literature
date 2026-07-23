@@ -10,3 +10,4 @@ export * from "./book";
 export * from "./feed";
 export * from "./search";
 export * from "./commerce";
+export * from "./identity";

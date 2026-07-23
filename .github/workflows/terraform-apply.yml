@@ -73,6 +73,9 @@ jobs:
       - name: Build api-commerce Lambda package
         run: bash scripts/package-lambda.sh
         working-directory: apps/api-commerce
+      - name: Build api-identity Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-identity
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"

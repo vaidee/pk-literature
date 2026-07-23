@@ -36,28 +36,36 @@ function requireEnv(name: string): string {
   return value;
 }
 
+// Exported (not just used inline below) so eventbridge-handler.ts — a
+// standalone Lambda entry point EventBridge invokes directly, with no
+// API Gateway/serverless-express in front of it and no reason to pay
+// for a full Nest DI bootstrap for a single background job — can reuse
+// the exact same connection/IAM-token logic without a copy that could
+// drift.
+export function createKysely(): Kysely<Database> {
+  const pool = new Pool({
+    host: process.env.PGHOST,
+    port: Number(process.env.PGPORT ?? 5432),
+    database: process.env.PGDATABASE,
+    user: process.env.PGUSER,
+    password: resolvePassword(),
+    // RDS Proxy requires TLS; local dev (docker-compose) disables it.
+    ssl:
+      process.env.PGSSL === "disable"
+        ? undefined
+        : { rejectUnauthorized: process.env.NODE_ENV === "production" },
+    max: 5, // small per-invocation pool — RDS Proxy does the real pooling
+  });
+
+  return new Kysely<Database>({
+    dialect: new PostgresDialect({ pool }),
+    plugins: [new CamelCasePlugin()],
+  });
+}
+
 const kyselyProvider: Provider = {
   provide: KYSELY,
-  useFactory: () => {
-    const pool = new Pool({
-      host: process.env.PGHOST,
-      port: Number(process.env.PGPORT ?? 5432),
-      database: process.env.PGDATABASE,
-      user: process.env.PGUSER,
-      password: resolvePassword(),
-      // RDS Proxy requires TLS; local dev (docker-compose) disables it.
-      ssl:
-        process.env.PGSSL === "disable"
-          ? undefined
-          : { rejectUnauthorized: process.env.NODE_ENV === "production" },
-      max: 5, // small per-invocation pool — RDS Proxy does the real pooling
-    });
-
-    return new Kysely<Database>({
-      dialect: new PostgresDialect({ pool }),
-      plugins: [new CamelCasePlugin()],
-    });
-  },
+  useFactory: createKysely,
 };
 
 @Global()

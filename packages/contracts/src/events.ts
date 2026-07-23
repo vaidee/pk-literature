@@ -80,3 +80,17 @@ export interface RefundIssuedEvent {
   refundId: string;
   amount: number;
 }
+
+// Identity events (SPEC-07). Published by apps/api-identity on
+// registration; anonymousId is null when the caller registered without
+// ever having sent an X-Anonymous-Id (a session that starts as a
+// direct signup, not a browse-then-register flow) — consumers (e.g.
+// apps/api-commerce's cart-merge handler) treat that as "nothing to
+// merge," not an error. "Do not duplicate events" (SPEC-07 Anonymous
+// Merge) is enforced by identity.anonymous_profiles.merged_at, not by
+// this event type itself.
+export interface UserRegisteredEvent {
+  userId: string;
+  email: string;
+  anonymousId: string | null;
+}

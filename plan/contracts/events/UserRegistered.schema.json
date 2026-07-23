@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "anonymousId": {
+      "type": ["string", "null"],
+      "description": "null when the caller registered without ever sending X-Anonymous-Id. Otherwise the anonymous session to merge (SPEC-07 Anonymous Merge: likes, interest profile, cart, preferences)."
+    }
+  },
+  "required": ["userId", "email", "anonymousId"]
+}

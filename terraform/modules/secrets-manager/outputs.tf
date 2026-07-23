@@ -70,3 +70,7 @@ output "medusa_admin_email" {
 output "medusa_admin_password_secret_arn" {
   value = aws_secretsmanager_secret.medusa_admin.arn
 }
+
+output "identity_jwt_signing_secret_arn" {
+  value = aws_secretsmanager_secret.identity_jwt_signing_secret.arn
+}

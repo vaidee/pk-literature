@@ -13,6 +13,15 @@ output "alias_invoke_arn" {
   value = aws_lambda_alias.live.invoke_arn
 }
 
+# The plain Lambda ARN (qualified with the alias), as opposed to
+# alias_invoke_arn's API-Gateway-specific URI format — this is what
+# non-API-Gateway invokers need, e.g. an aws_cloudwatch_event_target's
+# `arn` (Phase 7's UserRegistered consumer, environments/<env>/
+# api-commerce.tf, is the first thing in this repo to need it).
+output "alias_arn" {
+  value = aws_lambda_alias.live.arn
+}
+
 output "alias_name" {
   value = aws_lambda_alias.live.name
 }
