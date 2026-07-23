@@ -71,7 +71,6 @@ module "lambda_api_publisher_import" {
     PGPORT               = "5432"
     PGDATABASE           = "pk_literature"
     PGUSER               = local.publisher_import_db_user
-    AWS_REGION           = data.aws_region.current.name
     EVENTBRIDGE_BUS_NAME = module.eventbridge.bus_name
     MEDIA_BUCKET_NAME    = module.s3.bucket_id
   }

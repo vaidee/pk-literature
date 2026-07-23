@@ -48,7 +48,6 @@ module "lambda_api_feed" {
     PGPORT       = "5432"
     PGDATABASE   = "pk_literature"
     PGUSER       = local.api_feed_db_user
-    AWS_REGION   = data.aws_region.current.name
     CDN_BASE_URL = "https://cdn.${var.domain_name}"
     # SPEC-05 "Feature Flags" — all default OFF except editorial
     # shelves and New Arrivals, which aren't flag-gated at all.

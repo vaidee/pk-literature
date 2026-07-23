@@ -67,7 +67,6 @@ module "lambda_api_identity" {
     PGPORT       = "5432"
     PGDATABASE   = "pk_literature"
     PGUSER       = local.api_identity_db_user
-    AWS_REGION   = data.aws_region.current.name
 
     EVENTBRIDGE_BUS_NAME = module.eventbridge.bus_name
 

@@ -53,7 +53,6 @@ module "lambda_api_search" {
     PGPORT       = "5432"
     PGDATABASE   = "pk_literature"
     PGUSER       = local.api_search_db_user
-    AWS_REGION   = data.aws_region.current.name
     CDN_BASE_URL = "https://cdn.${var.domain_name}"
     # SPEC-08 §21 — personalization ranking boost, off by default,
     # same feature-flag convention as apps/api-feed.

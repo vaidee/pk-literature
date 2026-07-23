@@ -90,6 +90,8 @@ resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx" {
   }
 }
 
+data "aws_region" "current" {}
+
 resource "aws_cloudwatch_dashboard" "platform" {
   dashboard_name = "pk-literature-${var.environment}-platform"
 
@@ -103,6 +105,7 @@ resource "aws_cloudwatch_dashboard" "platform" {
         height = 6
         properties = {
           title   = "RDS CPU"
+          region  = data.aws_region.current.name
           metrics = [["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.rds_instance_id]]
           period  = 300
           stat    = "Average"
@@ -115,7 +118,8 @@ resource "aws_cloudwatch_dashboard" "platform" {
         width  = 12
         height = 6
         properties = {
-          title = "API Gateway requests / 5xx"
+          title  = "API Gateway requests / 5xx"
+          region = data.aws_region.current.name
           metrics = [
             ["AWS/ApiGateway", "Count", "ApiId", var.api_gateway_id],
             ["AWS/ApiGateway", "5xx", "ApiId", var.api_gateway_id],
