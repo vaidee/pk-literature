@@ -1,6 +1,6 @@
 variable "aws_region" {
   type    = string
-  default = "ap-south-1"
+  default = "ap-southeast-1"
 }
 
 variable "domain_name" {
@@ -22,7 +22,7 @@ variable "alarm_email" {
 
 variable "azs" {
   type    = list(string)
-  default = ["ap-south-1a", "ap-south-1b"]
+  default = ["ap-southeast-1a", "ap-southeast-1b"]
 }
 
 # --- Existing VPC to reuse (modules/vpc's create_vpc = false mode) ---
