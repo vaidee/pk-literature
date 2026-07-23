@@ -78,6 +78,12 @@ variable "existing_nat_gateway_ids" {
   default     = []
 }
 
+variable "existing_interface_endpoint_sg_ids" {
+  description = "REPLACE before first apply. Security groups already attached to this reused VPC's existing secretsmanager/events/logs/ecr.api/ecr.dkr interface endpoints (modules/vpc-endpoints' create_endpoints = false path, main.tf). Find via: aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=<vpc-id> --query 'VpcEndpoints[].Groups[].GroupId'"
+  type        = list(string)
+  default     = ["sg-REPLACE_ME_1", "sg-REPLACE_ME_2"]
+}
+
 variable "directus_image_tag" {
   description = "Tag mirrored into pk-literature/directus by .github/workflows/mirror-directus-image.yml — matches apps/directus/Dockerfile's pinned base."
   type        = string

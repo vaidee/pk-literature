@@ -124,12 +124,17 @@ resource "aws_vpc_security_group_egress_rule" "lambda_db_to_rds_proxy" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "lambda_db_to_vpc_endpoints" {
-  security_group_id            = aws_security_group.lambda_db.id
-  referenced_security_group_id = aws_security_group.vpc_endpoints.id
-  from_port                    = 443
-  to_port                      = 443
-  ip_protocol                  = "tcp"
-  description                  = "HTTPS to Secrets Manager/EventBridge/CloudWatch Logs interface endpoints"
+  security_group_id = aws_security_group.lambda_db.id
+  # CIDR, not a security-group reference: modules/vpc-endpoints' interface
+  # endpoints may be ones this Terraform config reuses rather than
+  # creates (create_endpoints = false), in which case they sit behind a
+  # security group this config doesn't manage. VPC-CIDR-scoped HTTPS
+  # egress works the same either way.
+  cidr_ipv4   = var.vpc_cidr
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+  description = "HTTPS to Secrets Manager/EventBridge/CloudWatch Logs interface endpoints"
 }
 
 # --- lambda-egress-sg: egress 443 to the internet (via NAT), egress 5432 to rds-proxy-sg ---
@@ -237,12 +242,14 @@ resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_rds_proxy" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_vpc_endpoints" {
-  security_group_id            = aws_security_group.ecs_directus.id
-  referenced_security_group_id = aws_security_group.vpc_endpoints.id
-  from_port                    = 443
-  to_port                      = 443
-  ip_protocol                  = "tcp"
-  description                  = "HTTPS to S3/Secrets Manager/EventBridge/ECR interface endpoints"
+  security_group_id = aws_security_group.ecs_directus.id
+  # Same reasoning as lambda_db_to_vpc_endpoints above — CIDR, not an
+  # SG reference, since the endpoints may be reused/unmanaged ones.
+  cidr_ipv4   = var.vpc_cidr
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+  description = "HTTPS to S3/Secrets Manager/EventBridge/ECR interface endpoints"
 }
 
 # ---------------------------------------------------------------------

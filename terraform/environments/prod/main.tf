@@ -49,6 +49,7 @@ module "security_groups" {
 
   environment = "prod"
   vpc_id      = module.vpc.vpc_id
+  vpc_cidr    = module.vpc.vpc_cidr
 }
 
 module "vpc_endpoints" {
@@ -60,6 +61,16 @@ module "vpc_endpoints" {
   private_isolated_route_table_ids = [module.vpc.private_isolated_route_table_id]
   private_isolated_subnet_ids      = module.vpc.private_isolated_subnet_ids
   endpoint_security_group_id       = module.security_groups.vpc_endpoints_sg_id
+
+  # This account's reused VPC (main.tf's "existing VPC" module.vpc call)
+  # already has all six of these endpoints from an earlier, unrelated
+  # project — a real apply confirmed both the S3 gateway endpoint's
+  # route-table conflict and the interface endpoints' private-DNS
+  # conflict when this tried to create duplicates. See
+  # modules/vpc-endpoints' header comment.
+  create_endpoints                   = false
+  existing_interface_endpoint_sg_ids = var.existing_interface_endpoint_sg_ids
+  consumer_security_group_ids        = [module.security_groups.lambda_db_sg_id, module.security_groups.ecs_directus_sg_id]
 }
 
 module "secrets_manager" {

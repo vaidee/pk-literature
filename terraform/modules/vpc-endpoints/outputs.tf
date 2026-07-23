@@ -1,5 +1,5 @@
 output "s3_endpoint_id" {
-  value = aws_vpc_endpoint.s3.id
+  value = var.create_endpoints ? aws_vpc_endpoint.s3[0].id : null
 }
 
 output "interface_endpoint_ids" {
