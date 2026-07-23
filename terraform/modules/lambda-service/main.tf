@@ -42,7 +42,14 @@ resource "aws_iam_role_policy_attachment" "vpc_access" {
 }
 
 resource "aws_iam_role_policy" "additional" {
-  count = var.additional_policy_json != null ? 1 : 0
+  # See ecs-service/main.tf's task_additional resource for why this is
+  # gated on a caller-supplied literal boolean rather than
+  # `var.additional_policy_json != null`: several callers' policy
+  # documents reference module.rds_proxy.iam_auth_resource_id, which is
+  # unknown until the RDS Proxy exists, making a `!= null` comparison
+  # against the whole document unevaluable at plan time on a
+  # first-ever apply.
+  count = var.attach_additional_policy ? 1 : 0
 
   name   = "additional-permissions"
   role   = aws_iam_role.this.id

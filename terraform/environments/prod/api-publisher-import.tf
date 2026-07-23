@@ -76,7 +76,8 @@ module "lambda_api_publisher_import" {
     MEDIA_BUCKET_NAME    = module.s3.bucket_id
   }
 
-  additional_policy_json = data.aws_iam_policy_document.api_publisher_import_task.json
+  additional_policy_json   = data.aws_iam_policy_document.api_publisher_import_task.json
+  attach_additional_policy = true
 }
 
 resource "aws_apigatewayv2_integration" "api_publisher_import" {

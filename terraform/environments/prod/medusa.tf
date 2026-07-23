@@ -90,5 +90,6 @@ module "ecs_medusa" {
     COOKIE_SECRET = module.secrets_manager.medusa_cookie_secret_secret_arn
   }
 
-  additional_policy_json = data.aws_iam_policy_document.medusa_task.json
+  additional_policy_json   = data.aws_iam_policy_document.medusa_task.json
+  attach_additional_policy = true
 }
