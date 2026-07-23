@@ -20,16 +20,31 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 }
 
 # One deploy role per environment. Trust policy scopes which
-# branch/ref is allowed to assume which role — phase branches and main
-# can assume gha-deploy-dev; only main can assume gha-deploy-qa/prod
-# (spec-12-cicd.md's pipeline only ever runs the qa/prod apply steps
-# after merge to main, so the trust policy mirrors that rather than
-# relying on the workflow alone to enforce it).
+# branch/ref is allowed to assume which role.
+#
+# prod includes "pull_request" alongside "ref:refs/heads/main" because
+# this repo's single-environment posture (terraform-apply.yml's header)
+# has terraform-plan.yml using this same gha-deploy-prod role for
+# PR-triggered `terraform plan` runs — and a pull_request-triggered
+# GitHub Actions OIDC token's sub claim is the literal string
+# "pull_request", never a "ref:refs/heads/..." value, even for a PR
+# opened against main. Without this, every PR's plan job fails
+# `AssumeRoleWithWebIdentity` outright (this is exactly what "dev" used
+# to provide before the dev/qa environments were dropped from CI — see
+# git history if multi-environment is ever revisited).
+#
+# Real tradeoff, not a free lunch: this means any PR opened against
+# vaidee/pk-literature can assume gha-deploy-prod during that workflow
+# run — which has broad permissions (gha_deploy_permissions below), not
+# just plan/read access. Acceptable for a private repo where only
+# trusted people can open PRs; would need splitting into a separate,
+# narrowly-scoped read-only role for PR-triggered runs before this repo
+# ever accepted outside contributions.
 locals {
   deploy_role_trusted_refs = {
     dev  = ["ref:refs/heads/*", "pull_request"] # any branch/PR may plan+apply dev
     qa   = ["ref:refs/heads/main"]
-    prod = ["ref:refs/heads/main"]
+    prod = ["ref:refs/heads/main", "pull_request"]
   }
 }
 
