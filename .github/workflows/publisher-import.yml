@@ -7,10 +7,10 @@ name: Publisher Import
 # terraform/bootstrap/gha-publisher-import.tf).
 #
 # The `schedule` cron trigger is commented out for now — no AWS
-# environment has actually been applied yet (terraform-apply.yml is
-# also gated to manual dev-only runs, see that file's own header), so a
-# live cron would just fail against nothing every time it fired.
-# Uncomment once dev has real infrastructure and a real gha-publisher-import-dev
+# environment has actually been applied yet, so a live cron would just
+# fail against nothing every time it fired. Uncomment once prod (the
+# only environment this repo stands up — see terraform-apply.yml's
+# header) has real infrastructure and a real gha-publisher-import-prod
 # role ARN in this repo's variables. Until then, workflow_dispatch is
 # the only way to run this — same "manual gate first" posture as the
 # deploy pipeline.
@@ -27,12 +27,12 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment to run against. Only 'dev' is wired up right now, matching terraform-apply.yml."
+        description: "Environment to run against. Only 'prod' is wired up right now, matching terraform-apply.yml's single-environment posture."
         required: true
         type: choice
         options:
-          - dev
-        default: dev
+          - prod
+        default: prod
       publisher_id:
         description: "catalog.publishers.id (UUID) of the publisher to import."
         required: true
@@ -53,10 +53,10 @@ permissions:
   contents: read
 
 jobs:
-  import-dev:
-    if: inputs.environment == 'dev'
+  import-prod:
+    if: inputs.environment == 'prod'
     runs-on: ubuntu-latest
-    environment: dev
+    environment: prod
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -69,7 +69,7 @@ jobs:
         run: pnpm --filter @pk-literature/adapter-sdk --filter publisher-crawler run build
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_PUBLISHER_IMPORT_ROLE_ARN_DEV }}
+          role-to-assume: ${{ vars.AWS_PUBLISHER_IMPORT_ROLE_ARN_PROD }}
           aws-region: ap-south-1
       - name: Run import
         working-directory: apps/publisher-crawler
@@ -84,7 +84,7 @@ jobs:
           # the Kalachuvadu reference adapter registered so far, hence
           # the single variable rather than a lookup table.
           PUBLISHER_BASE_URL: ${{ vars.KALACHUVADU_BASE_URL }}
-          STAGING_INGEST_BASE_URL: ${{ vars.STAGING_INGEST_BASE_URL_DEV }}
+          STAGING_INGEST_BASE_URL: ${{ vars.STAGING_INGEST_BASE_URL_PROD }}
           AWS_REGION: ap-south-1
           IMPORT_TRIGGER: ${{ inputs.trigger }}
         run: pnpm start
