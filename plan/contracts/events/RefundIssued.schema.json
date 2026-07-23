@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "orderId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "refundId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "amount": {
+      "type": "number"
+    }
+  },
+  "required": ["orderId", "refundId", "amount"]
+}

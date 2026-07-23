@@ -116,3 +116,171 @@ resource "aws_secretsmanager_secret_version" "directus_admin" {
   secret_id     = aws_secretsmanager_secret.directus_admin.id
   secret_string = random_password.directus_admin.result
 }
+
+# ---------------------------------------------------------------------
+# Phase 6: Razorpay (secrets.md's `/<env>/razorpay/*`, read by both
+# lambda-api-commerce and ecs-medusa — the one pair of credentials this
+# repo has that Terraform cannot generate itself, since they're issued
+# by Razorpay's dashboard, not created by us. The `random_password`
+# values below are placeholders only, so `terraform apply` produces a
+# valid (if non-functional) secret on day one instead of erroring on a
+# missing value; `ignore_changes` on `secret_string` means a human
+# pasting the real sandbox/live key over the placeholder via the AWS
+# Console or CLI is never clobbered by a subsequent `terraform apply`.
+# No real Razorpay credentials exist in this environment (disclosed in
+# apps/api-commerce/.env.example and this repo's PR descriptions).
+# ---------------------------------------------------------------------
+
+resource "random_password" "razorpay_key_id" {
+  length  = 24
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "razorpay_key_id" {
+  name        = "/pk-literature/${var.environment}/razorpay/key-id"
+  description = "Razorpay API key ID — placeholder until a human sets the real value (issued by Razorpay's dashboard, not Terraform-generated)"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "razorpay_key_id" {
+  secret_id     = aws_secretsmanager_secret.razorpay_key_id.id
+  secret_string = random_password.razorpay_key_id.result
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+resource "random_password" "razorpay_key_secret" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "razorpay_key_secret" {
+  name        = "/pk-literature/${var.environment}/razorpay/key-secret"
+  description = "Razorpay API key secret — placeholder until a human sets the real value"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "razorpay_key_secret" {
+  secret_id     = aws_secretsmanager_secret.razorpay_key_secret.id
+  secret_string = random_password.razorpay_key_secret.result
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+resource "random_password" "razorpay_webhook_secret" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "razorpay_webhook_secret" {
+  name        = "/pk-literature/${var.environment}/razorpay/webhook-secret"
+  description = "Razorpay webhook signing secret — read by lambda-api-commerce's POST /payments/webhook on every call (secrets.md, never cached beyond the Lambda execution environment's lifetime); placeholder until a human sets the real value"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "razorpay_webhook_secret" {
+  secret_id     = aws_secretsmanager_secret.razorpay_webhook_secret.id
+  secret_string = random_password.razorpay_webhook_secret.result
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# ---------------------------------------------------------------------
+# Phase 6: Medusa. Same stored-password rationale as Directus (Medusa's
+# Knex-based Postgres client has no dynamic IAM token refresh support
+# either) — connects as medusa_app (migration
+# 20260401000004_medusa_app_role.sql) with a stored password, not RDS
+# Proxy IAM auth.
+# ---------------------------------------------------------------------
+
+resource "random_password" "medusa_db" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "medusa_db" {
+  name        = "/pk-literature/${var.environment}/medusa/db-password"
+  description = "Stored password for the medusa_app DB role (migration 20260401000004) — Medusa can't do RDS Proxy IAM auth, same reasoning as Directus"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "medusa_db" {
+  secret_id     = aws_secretsmanager_secret.medusa_db.id
+  secret_string = random_password.medusa_db.result
+}
+
+resource "random_password" "medusa_jwt_secret" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "medusa_jwt_secret" {
+  name        = "/pk-literature/${var.environment}/medusa/jwt-secret"
+  description = "Medusa JWT signing secret (admin auth)"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "medusa_jwt_secret" {
+  secret_id     = aws_secretsmanager_secret.medusa_jwt_secret.id
+  secret_string = random_password.medusa_jwt_secret.result
+}
+
+resource "random_password" "medusa_cookie_secret" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "medusa_cookie_secret" {
+  name        = "/pk-literature/${var.environment}/medusa/cookie-secret"
+  description = "Medusa session cookie signing secret (admin auth)"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "medusa_cookie_secret" {
+  secret_id     = aws_secretsmanager_secret.medusa_cookie_secret.id
+  secret_string = random_password.medusa_cookie_secret.result
+}
+
+resource "random_password" "medusa_admin" {
+  length           = 32
+  special          = true
+  override_special = "!#$%^&*()-_=+[]{}<>:?"
+}
+
+resource "aws_secretsmanager_secret" "medusa_admin" {
+  name        = "/pk-literature/${var.environment}/medusa/admin-password"
+  description = "Medusa first-boot admin user password"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "medusa_admin" {
+  secret_id     = aws_secretsmanager_secret.medusa_admin.id
+  secret_string = random_password.medusa_admin.result
+}

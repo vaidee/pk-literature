@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "orderId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "shipmentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "carrier": {
+      "type": ["string", "null"]
+    },
+    "trackingNumber": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": ["orderId", "shipmentId", "carrier", "trackingNumber"]
+}

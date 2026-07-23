@@ -30,3 +30,9 @@ variable "directus_image_tag" {
   type        = string
   default     = "11.17.4"
 }
+
+variable "medusa_image_tag" {
+  description = "Tag built into pk-literature/medusa by .github/workflows/build-medusa-image.yml — matches the @medusajs/* version pinned in apps/medusa/package.json."
+  type        = string
+  default     = "2.17.2"
+}

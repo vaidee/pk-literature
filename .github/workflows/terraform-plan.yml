@@ -47,10 +47,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # terraform/environments/*/api-catalog.tf reads
-      # apps/api-catalog/dist-lambda.zip via filebase64sha256() — that's
-      # evaluated during `plan`, not just `apply`, so the package must
-      # exist before terraform runs at all, same as terraform-apply.yml.
+      # Every environments/*/api-*.tf file reads its own service's
+      # dist-lambda.zip via filebase64sha256() — that's evaluated during
+      # `plan`, not just `apply`, so every package must exist before
+      # terraform runs at all, same as terraform-apply.yml. (This step
+      # only built api-catalog's package through Phase 5 — api-feed,
+      # api-search, and api-publisher-import's own environments/*.tf
+      # files had the identical requirement the whole time; fixed here
+      # while adding api-commerce's.)
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -60,6 +64,18 @@ jobs:
       - name: Build api-catalog Lambda package
         run: bash scripts/package-lambda.sh
         working-directory: apps/api-catalog
+      - name: Build api-publisher-import Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-publisher-import
+      - name: Build api-feed Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-feed
+      - name: Build api-search Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-search
+      - name: Build api-commerce Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-commerce
 
       - uses: hashicorp/setup-terraform@v3
         with:

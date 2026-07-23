@@ -24,3 +24,7 @@ build/
 # Lambda packaging build artifacts (apps/*/scripts/package-lambda.sh)
 .lambda-package/
 **/dist-lambda.zip
+
+# apps/medusa build output (`medusa build`)
+apps/medusa/.medusa/
+apps/medusa/.cache/
