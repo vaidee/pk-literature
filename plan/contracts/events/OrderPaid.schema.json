@@ -2,10 +2,13 @@
   "type": "object",
   "properties": {
     "orderId": {
-      "type": "string"
+      "type": "string",
+      "format": "uuid"
     },
     "paymentId": {
-      "type": "string"
+      "type": "string",
+      "format": "uuid"
     }
-  }
+  },
+  "required": ["orderId", "paymentId"]
 }

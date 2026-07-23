@@ -1,0 +1,74 @@
+name: Build Medusa Image
+
+# Builds apps/medusa/Dockerfile — unlike Directus there is no upstream
+# image to layer onto; this compiles the whole Medusa server+admin from
+# source (`medusa build`) and pushes the result to the shared ECR repo
+# (terraform/bootstrap/ecr.tf's pk-literature/medusa). The running ECS
+# task pulls only from here, never npm/Docker Hub directly — this CI
+# runner is where the internet-facing build happens instead (the task
+# itself sits in the private-nat tier for a different reason — Razorpay
+# egress, ADR-009 — not because it needs to reach npm).
+#
+# GATED, MANUAL-TRIGGER ONLY, matching build-directus-image.yml's
+# philosophy: nothing pushes a new image on every merge. Run this
+# explicitly, then separately re-run terraform-apply.yml (bumping
+# medusa_image_tag if you're moving to a new @medusajs/* version) to
+# roll it out.
+#
+# ECR repo tags are IMMUTABLE (terraform/bootstrap/ecr.tf) — pushing a
+# tag that already exists fails loudly rather than silently
+# overwriting, so this checks first and skips the push if the tag is
+# already there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      medusa_image_tag:
+        description: "Tag to build and push (must match environments/*/variables.tf's medusa_image_tag to actually roll out) — defaults to the @medusajs/* version pinned in apps/medusa/package.json."
+        required: true
+        default: "2.17.2"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ECR_REPOSITORY: pk-literature/medusa
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_DEV }}
+          aws-region: ap-south-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      - name: Skip if tag already exists (immutable repo)
+        id: check
+        run: |
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="${{ inputs.medusa_image_tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        if: steps.check.outputs.exists == 'false'
+        working-directory: apps/medusa
+        run: |
+          docker build \
+            -t "${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:${{ inputs.medusa_image_tag }}" \
+            .
+
+      - name: Push
+        if: steps.check.outputs.exists == 'false'
+        run: docker push "${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:${{ inputs.medusa_image_tag }}"

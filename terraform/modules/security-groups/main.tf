@@ -1,6 +1,6 @@
 # Phase 0 added the DB-access chain + VPC endpoint access. Phase 2 adds
-# ecs-directus-sg and alb-admin-sg below. ecs-medusa-sg is still added
-# by phase-6-commerce, per development/branching.md's "each phase owns
+# ecs-directus-sg and alb-admin-sg below. Phase 6 adds lambda-egress-sg
+# and ecs-medusa-sg, per development/branching.md's "each phase owns
 # its own infra" rule.
 #
 # Chain: rds-sg <- rds-proxy-sg <- lambda-db-sg
@@ -173,7 +173,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_db" {
 resource "aws_security_group" "alb_admin" {
   name_prefix = "pk-literature-${var.environment}-alb-admin-"
   vpc_id      = var.vpc_id
-  description = "Admin ALB (Directus, future Medusa) — public HTTPS ingress only"
+  description = "Admin ALB (Directus, Medusa) — public HTTPS ingress only"
 
   tags = {
     Name        = "pk-literature-${var.environment}-alb-admin"
@@ -243,4 +243,69 @@ resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_vpc_endpoints" {
   to_port                      = 443
   ip_protocol                  = "tcp"
   description                  = "HTTPS to S3/Secrets Manager/EventBridge/ECR interface endpoints"
+}
+
+# ---------------------------------------------------------------------
+# Phase 6: Medusa ECS task. Unlike ecs-directus (private-isolated, no
+# internet route), this one lives in the private-nat tier — it's the
+# other half of ADR-009's "NAT Gateway tier: shrinks to {commerce,
+# Medusa}" (alongside lambda-api-commerce), needing real internet
+# egress to reach Razorpay for refunds (SPEC-06's "Medusa
+# Responsibilities: Refunds"). Egress rules mirror lambda-egress-sg
+# rather than ecs-directus-sg's vpc-endpoints-sg egress — the NAT
+# Gateway route handles Secrets Manager/EventBridge/ECR reachability
+# for anything already routed to the internet, so no separate
+# vpc-endpoints-sg egress is needed here (same reasoning as
+# lambda-egress-sg, which has no vpc-endpoints-sg rule either).
+# ---------------------------------------------------------------------
+
+resource "aws_security_group" "ecs_medusa" {
+  name_prefix = "pk-literature-${var.environment}-ecs-medusa-"
+  vpc_id      = var.vpc_id
+  description = "Medusa ECS task — inbound from the admin ALB, outbound internet egress for Razorpay"
+
+  tags = {
+    Name        = "pk-literature-${var.environment}-ecs-medusa"
+    Environment = var.environment
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_admin_to_ecs_medusa" {
+  security_group_id            = aws_security_group.alb_admin.id
+  referenced_security_group_id = aws_security_group.ecs_medusa.id
+  from_port                    = 9000
+  to_port                      = 9000
+  ip_protocol                  = "tcp"
+  description                  = "Medusa container port"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ecs_medusa_from_alb" {
+  security_group_id            = aws_security_group.ecs_medusa.id
+  referenced_security_group_id = aws_security_group.alb_admin.id
+  from_port                    = 9000
+  to_port                      = 9000
+  ip_protocol                  = "tcp"
+  description                  = "Medusa container port from the admin ALB"
+}
+
+resource "aws_vpc_security_group_egress_rule" "ecs_medusa_to_rds_proxy" {
+  security_group_id            = aws_security_group.ecs_medusa.id
+  referenced_security_group_id = aws_security_group.rds_proxy.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "Postgres to RDS Proxy"
+}
+
+resource "aws_vpc_security_group_egress_rule" "ecs_medusa_to_internet" {
+  security_group_id = aws_security_group.ecs_medusa.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "HTTPS egress (Razorpay, Secrets Manager, EventBridge, ECR) via NAT Gateway"
 }

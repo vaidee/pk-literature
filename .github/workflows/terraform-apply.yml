@@ -61,6 +61,18 @@ jobs:
       - name: Build api-catalog Lambda package
         run: bash scripts/package-lambda.sh
         working-directory: apps/api-catalog
+      - name: Build api-publisher-import Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-publisher-import
+      - name: Build api-feed Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-feed
+      - name: Build api-search Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-search
+      - name: Build api-commerce Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-commerce
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
@@ -72,8 +84,12 @@ jobs:
         run: |
           terraform init -input=false
           terraform apply -input=false -auto-approve
-      # TODO(phase-2+): deploy OpenNext / ECS here, per SPEC-12, following
-      # the same "build artifact, then terraform apply" shape as above.
+      # TODO(phase-2+): deploy OpenNext here, per SPEC-12. Directus/
+      # Medusa images are NOT built/deployed by this workflow at all —
+      # those are gated, manual-trigger-only workflows
+      # (build-directus-image.yml/build-medusa-image.yml), run
+      # separately before bumping directus_image_tag/medusa_image_tag
+      # and re-running this workflow to roll the new tag out.
 
   smoke-test-dev:
     needs: apply-dev

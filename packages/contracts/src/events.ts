@@ -49,15 +49,34 @@ export interface ImportRejectedEvent {
   reasons: string[];
 }
 
-// Commerce events (SPEC-06) — defined here now since the schema JSON
-// already exists, even though apps/api-commerce itself is Phase 6.
+// Commerce events (SPEC-06). customerId is nullable throughout — SPEC-06
+// Principles: "Anonymous checkout supported," so an order may never
+// have an authenticated customer behind it at all.
 export interface OrderCreatedEvent {
   orderId: string;
-  customerId: string;
+  customerId: string | null;
   total: number;
 }
 
 export interface OrderPaidEvent {
   orderId: string;
   paymentId: string;
+}
+
+export interface OrderCancelledEvent {
+  orderId: string;
+  reason: string | null;
+}
+
+export interface OrderShippedEvent {
+  orderId: string;
+  shipmentId: string;
+  carrier: string | null;
+  trackingNumber: string | null;
+}
+
+export interface RefundIssuedEvent {
+  orderId: string;
+  refundId: string;
+  amount: number;
 }

@@ -2,13 +2,16 @@
   "type": "object",
   "properties": {
     "orderId": {
-      "type": "string"
+      "type": "string",
+      "format": "uuid"
     },
     "customerId": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "null for anonymous checkout (SPEC-06 Principles: Anonymous checkout supported)."
     },
     "total": {
       "type": "number"
     }
-  }
+  },
+  "required": ["orderId", "customerId", "total"]
 }

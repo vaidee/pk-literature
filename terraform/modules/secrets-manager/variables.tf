@@ -17,3 +17,14 @@ variable "directus_admin_email" {
   type    = string
   default = "admin@pk-literature.example"
 }
+
+variable "medusa_db_username" {
+  description = "Matches the DB role created by migration 20260401000004_medusa_app_role.sql."
+  type        = string
+  default     = "medusa_app"
+}
+
+variable "medusa_admin_email" {
+  type    = string
+  default = "admin@pk-literature.example"
+}
