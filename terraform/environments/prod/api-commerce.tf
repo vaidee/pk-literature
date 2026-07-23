@@ -77,7 +77,6 @@ module "lambda_api_commerce" {
     PGPORT       = "5432"
     PGDATABASE   = "pk_literature"
     PGUSER       = local.api_commerce_db_user
-    AWS_REGION   = data.aws_region.current.name
     CDN_BASE_URL = "https://cdn.${var.domain_name}"
 
     EVENTBRIDGE_BUS_NAME = module.eventbridge.bus_name
@@ -219,7 +218,6 @@ module "lambda_api_commerce_user_registered_consumer" {
     PGPORT       = "5432"
     PGDATABASE   = "pk_literature"
     PGUSER       = local.api_commerce_db_user
-    AWS_REGION   = data.aws_region.current.name
   }
 
   additional_policy_json   = data.aws_iam_policy_document.api_commerce_user_registered_consumer_task.json
