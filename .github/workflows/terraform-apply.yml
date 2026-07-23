@@ -2,54 +2,59 @@ name: Deploy
 
 # spec-12-cicd.md — apply pipeline.
 #
-# GATED, MANUAL-TRIGGER ONLY: this workflow does NOT run on push/merge
-# to main. Merging a PR that touches terraform/ never applies anything
-# by itself — someone must explicitly go to the Actions tab and run
-# this workflow (workflow_dispatch). This is deliberate and is the
-# primary gate: it doesn't depend on a GitHub Environment protection
-# rule being configured correctly (see the note below on why that
-# alone isn't trustworthy).
+# Single-environment posture: this repo only stands up one real AWS
+# environment ("prod" — terraform/environments/prod). The dev/qa
+# directories terraform/environments/{dev,qa} were originally
+# scaffolded for a three-environment split are left in place but are no
+# longer wired into CI at all — see terraform-plan.yml's header for the
+# same note. (The commented-out dev/qa apply jobs this workflow used to
+# carry as a "how to re-enable" reference are gone too; pull them back
+# out of git history/PR #12's predecessor if multi-environment is ever
+# revisited — they're not worth the ongoing dead-code weight for a
+# single-environment setup.)
 #
-# qa and prod are commented out for now — dev only, per explicit
-# instruction. Uncomment the "qa" and "prod" blocks below (and fix up
-# the `needs:` chain — see the comments in place) when ready to
-# promote beyond dev.
+# TRIGGER: runs automatically on every push to main that touches
+# Terraform-relevant paths (i.e. once a PR merges) — no more manual
+# workflow_dispatch-only gate. The safety net instead is the
+# `environment: prod` below PLUS a required-reviewers rule configured
+# on that GitHub Environment (Settings > Environments > prod > "Required
+# reviewers") — GitHub pauses the job for manual approval before it runs
+# anything. That reviewer rule can only be configured in the repo's
+# Settings UI/API, not from this file — set it before merging anything
+# that would touch prod infrastructure, or this "manual approval gate"
+# doesn't actually exist yet.
 #
-# Defense in depth: each job also sets `environment: <env>`, which if
-# you ADDITIONALLY configure required reviewers on that GitHub
-# Environment (Settings > Environments), adds a second approval layer
-# on top of the manual trigger. That configuration is optional here
-# specifically because workflow_dispatch is already the primary gate —
-# but do configure it before ever re-enabling qa/prod, since a second
-# person approving a prod change independently of whoever clicked
-# "Run workflow" is worth having.
+# workflow_dispatch is kept as a manual fallback (e.g. re-running an
+# apply with no new commit, such as after bumping directus_image_tag/
+# medusa_image_tag by hand) — it goes through the same approval gate.
 #
-# App deploy steps (OpenNext / ECS) beyond api-catalog are still TODOs.
-# api-catalog builds its own deployment package (pnpm build + pnpm
-# deploy + zip — see apps/api-catalog/scripts/package-lambda.sh) as a
-# step before `terraform apply`, since terraform/environments/*/
-# api-catalog.tf reads that zip's hash directly via filebase64sha256().
+# App deploy steps beyond api-catalog: apps/web's OpenNext packages are
+# built here (scripts/package-opennext.sh), but the built .open-next/
+# assets still need a separate `aws s3 sync` + CloudFront invalidation
+# step this workflow does not yet do — see apps/web/README.md's
+# Deploying section. Directus/Medusa images are NOT built/deployed by
+# this workflow at all — those are gated, manual-trigger-only workflows
+# (build-directus-image.yml/build-medusa-image.yml), run separately
+# before bumping directus_image_tag/medusa_image_tag and re-running this
+# workflow to roll the new tag out.
 
 on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: "Environment to apply. Only 'dev' is wired up right now — qa/prod jobs are commented out below."
-        required: true
-        type: choice
-        options:
-          - dev
-        default: dev
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/modules/**"
+      - "terraform/environments/prod/**"
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  apply-dev:
-    if: inputs.environment == 'dev'
+  apply:
     runs-on: ubuntu-latest
-    environment: dev
+    environment: prod
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -76,108 +81,23 @@ jobs:
       - name: Build api-identity Lambda package
         run: bash scripts/package-lambda.sh
         working-directory: apps/api-identity
+      - name: Build apps/web OpenNext packages
+        run: bash scripts/package-opennext.sh
+        working-directory: apps/web
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_DEV }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PROD }}
           aws-region: ap-south-1
-      - working-directory: terraform/environments/dev
+      - working-directory: terraform/environments/prod
         run: |
           terraform init -input=false
           terraform apply -input=false -auto-approve
-      # TODO(phase-2+): deploy OpenNext here, per SPEC-12. Directus/
-      # Medusa images are NOT built/deployed by this workflow at all —
-      # those are gated, manual-trigger-only workflows
-      # (build-directus-image.yml/build-medusa-image.yml), run
-      # separately before bumping directus_image_tag/medusa_image_tag
-      # and re-running this workflow to roll the new tag out.
 
-  smoke-test-dev:
-    needs: apply-dev
+  smoke-test:
+    needs: apply
     runs-on: ubuntu-latest
     steps:
-      - run: echo "TODO(phase-1+) — no application endpoints exist yet to smoke-test. This job is a placeholder so the pipeline shape (development/testing.md's E2E layer) is already wired for when apps/web + a Lambda exist."
-
-  # --- qa and prod: commented out, dev only for now ---
-  #
-  # To re-enable: uncomment this whole block, add "qa" (and later
-  # "prod") to the workflow_dispatch `environment` choice options above,
-  # and change this job's `if:` to match. Each still requires its own
-  # manual workflow_dispatch run — promoting past dev is never automatic
-  # even once uncommented.
-  #
-  # apply-qa:
-  #   if: inputs.environment == 'qa'
-  #   needs: smoke-test-dev   # only meaningful if you're promoting the same
-  #                           # run's dev result forward — otherwise trigger
-  #                           # qa's own workflow_dispatch run independently
-  #   runs-on: ubuntu-latest
-  #   environment: qa
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: pnpm/action-setup@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #         cache: "pnpm"
-  #     - run: pnpm install --frozen-lockfile
-  #     - name: Build api-catalog Lambda package
-  #       run: bash scripts/package-lambda.sh
-  #       working-directory: apps/api-catalog
-  #     - uses: hashicorp/setup-terraform@v3
-  #       with:
-  #         terraform_version: "1.9.8"
-  #     - uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_QA }}
-  #         aws-region: ap-south-1
-  #     - working-directory: terraform/environments/qa
-  #       run: |
-  #         terraform init -input=false
-  #         terraform apply -input=false -auto-approve
-  #
-  # smoke-test-qa:
-  #   needs: apply-qa
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - run: echo "TODO(phase-1+) — see smoke-test-dev."
-  #
-  # apply-prod:
-  #   if: inputs.environment == 'prod'
-  #   needs: smoke-test-qa
-  #   runs-on: ubuntu-latest
-  #   # Configure required reviewers on the "prod" GitHub Environment
-  #   # before ever uncommenting this — the manual workflow_dispatch
-  #   # trigger is the primary gate, but prod specifically should have
-  #   # the second, independent-approver layer too.
-  #   environment: prod
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: pnpm/action-setup@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #         cache: "pnpm"
-  #     - run: pnpm install --frozen-lockfile
-  #     - name: Build api-catalog Lambda package
-  #       run: bash scripts/package-lambda.sh
-  #       working-directory: apps/api-catalog
-  #     - uses: hashicorp/setup-terraform@v3
-  #       with:
-  #         terraform_version: "1.9.8"
-  #     - uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PROD }}
-  #         aws-region: ap-south-1
-  #     - working-directory: terraform/environments/prod
-  #       run: |
-  #         terraform init -input=false
-  #         terraform apply -input=false -auto-approve
-  #
-  # smoke-test-prod:
-  #   needs: apply-prod
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - run: echo "TODO(phase-1+) — see smoke-test-dev."
+      - run: echo "TODO(phase-1+) — no automated smoke test exists yet. This job is a placeholder so the pipeline shape (development/testing.md's E2E layer) is already wired for when one does."
