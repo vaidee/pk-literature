@@ -9,6 +9,25 @@
 # Every resource below is gated on var.create_vpc so this module can
 # also run in "reuse an existing VPC" mode (variables.tf) without
 # touching any downstream module — see that variable's own comment.
+#
+# Downstream for_each arguments (route table associations, the NAT
+# gateway) deliberately derive their keys from local.az_indexed /
+# local.nat_eip_keys again, rather than writing `for_each =
+# aws_subnet.public` etc. directly — chaining for_each straight off
+# another conditionally-for_each'd resource hit a real "Invalid for_each
+# argument... will be known only after apply" error against this
+# reused VPC (create_vpc = false), even though the referenced
+# resource's own instance set is entirely static (derived from
+# var.azs, no resource attributes involved). Re-deriving the same
+# static key set independently at each for_each site sidesteps
+# whatever conservatism causes that error.
+locals {
+  az_indexed = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
+
+  nat_eip_keys = var.create_vpc ? (
+    var.single_nat_gateway ? { (var.azs[0]) = 0 } : { for idx, az in var.azs : az => idx }
+  ) : {}
+}
 
 data "aws_vpc" "existing" {
   count = var.create_vpc ? 0 : 1
@@ -42,7 +61,7 @@ resource "aws_internet_gateway" "this" {
 # --- Public subnets (NAT Gateway ENI + Directus/Medusa admin ALBs only) ---
 
 resource "aws_subnet" "public" {
-  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
+  for_each = local.az_indexed
 
   vpc_id                  = aws_vpc.this[0].id
   availability_zone       = each.key
@@ -73,16 +92,16 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  for_each = aws_subnet.public
+  for_each = local.az_indexed
 
-  subnet_id      = each.value.id
+  subnet_id      = aws_subnet.public[each.key].id
   route_table_id = aws_route_table.public[0].id
 }
 
 # --- NAT Gateway(s) — single by default (infrastructure/networking.md) ---
 
 resource "aws_eip" "nat" {
-  for_each = var.create_vpc ? (var.single_nat_gateway ? { (var.azs[0]) = 0 } : { for idx, az in var.azs : az => idx }) : {}
+  for_each = local.nat_eip_keys
 
   domain = "vpc"
 
@@ -93,9 +112,9 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "this" {
-  for_each = aws_eip.nat
+  for_each = local.nat_eip_keys
 
-  allocation_id = each.value.id
+  allocation_id = aws_eip.nat[each.key].id
   subnet_id     = aws_subnet.public[each.key].id
 
   tags = {
@@ -109,7 +128,7 @@ resource "aws_nat_gateway" "this" {
 # --- Private-isolated subnets (NO route to NAT or IGW) ---
 
 resource "aws_subnet" "private_isolated" {
-  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
+  for_each = local.az_indexed
 
   vpc_id            = aws_vpc.this[0].id
   availability_zone = each.key
@@ -137,16 +156,16 @@ resource "aws_route_table" "private_isolated" {
 }
 
 resource "aws_route_table_association" "private_isolated" {
-  for_each = aws_subnet.private_isolated
+  for_each = local.az_indexed
 
-  subnet_id      = each.value.id
+  subnet_id      = aws_subnet.private_isolated[each.key].id
   route_table_id = aws_route_table.private_isolated[0].id
 }
 
 # --- Private-NAT subnets (Commerce Lambda, Medusa ECS — Razorpay calls) ---
 
 resource "aws_subnet" "private_nat" {
-  for_each = var.create_vpc ? { for idx, az in var.azs : az => idx } : {}
+  for_each = local.az_indexed
 
   vpc_id            = aws_vpc.this[0].id
   availability_zone = each.key
@@ -160,7 +179,7 @@ resource "aws_subnet" "private_nat" {
 }
 
 resource "aws_route_table" "private_nat" {
-  for_each = aws_subnet.private_nat
+  for_each = local.az_indexed
 
   vpc_id = aws_vpc.this[0].id
 
@@ -176,8 +195,8 @@ resource "aws_route_table" "private_nat" {
 }
 
 resource "aws_route_table_association" "private_nat" {
-  for_each = aws_subnet.private_nat
+  for_each = local.az_indexed
 
-  subnet_id      = each.value.id
+  subnet_id      = aws_subnet.private_nat[each.key].id
   route_table_id = aws_route_table.private_nat[each.key].id
 }
