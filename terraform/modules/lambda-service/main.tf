@@ -64,6 +64,7 @@ resource "aws_lambda_function" "this" {
   runtime          = var.runtime
   memory_size      = var.memory_size
   timeout          = var.timeout
+  architectures    = var.architectures
 
   # Publishes a new numbered version on every apply where the code
   # changed — the `live` alias below is what actually gets invoked,

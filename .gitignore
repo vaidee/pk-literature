@@ -21,10 +21,18 @@ dist/
 build/
 .DS_Store
 
-# Lambda packaging build artifacts (apps/*/scripts/package-lambda.sh)
+# Lambda packaging build artifacts (apps/*/scripts/package-lambda.sh,
+# apps/web/scripts/package-opennext.sh)
 .lambda-package/
 **/dist-lambda.zip
+**/dist-server-lambda.zip
+**/dist-image-lambda.zip
 
 # apps/medusa build output (`medusa build`)
 apps/medusa/.medusa/
 apps/medusa/.cache/
+
+# apps/web build output (`next build` / `open-next build`)
+apps/web/.next/
+apps/web/.open-next/
+apps/web/next-env.d.ts

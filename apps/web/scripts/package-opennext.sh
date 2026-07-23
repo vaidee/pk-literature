@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Produces the two deployment artifacts
+# terraform/modules/opennext's aws_lambda_function resources reference
+# via `filename`/`source_code_hash`:
+#   apps/web/dist-server-lambda.zip
+#   apps/web/dist-image-lambda.zip
+# Unlike every other service's package-lambda.sh, there's no
+# `pnpm deploy --prod` step here — `open-next build` (package.json's
+# opennext:build script, @opennextjs/aws) already esbuild-bundles each
+# Lambda's code and its dependencies into a single self-contained
+# directory per function; zipping that directory as-is is the whole job.
+#
+# NOT produced by this script: an upload of .open-next/assets (the
+# /_next/static/* + public/ build output the S3 origin serves). That's
+# a bulk `aws s3 sync` with per-file content-type/cache-control
+# headers, not a Lambda deployment package — Terraform doesn't model
+# that well, so it's a documented CI/deploy-pipeline step
+# (runbooks/deploy.md), not something this script or Terraform does.
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$APP_DIR/../.." && pwd)"
+OPEN_NEXT_DIR="$APP_DIR/.open-next"
+
+echo "==> Building workspace packages (domain-types, contracts, ui, web)"
+(cd "$ROOT_DIR" && pnpm --filter @pk-literature/domain-types --filter @pk-literature/contracts --filter @pk-literature/ui --filter web run build)
+
+echo "==> Running open-next build"
+(cd "$APP_DIR" && pnpm run opennext:build)
+
+package() {
+  local src_dir="$1"
+  local zip_path="$2"
+  if [ ! -d "$src_dir" ]; then
+    echo "error: expected open-next output directory not found: $src_dir" >&2
+    echo "       (@opennextjs/aws's output layout may have changed — check .open-next/ directly)" >&2
+    exit 1
+  fi
+  rm -f "$zip_path"
+  (cd "$src_dir" && zip -rqy "$zip_path" . -x "*.git*")
+  echo "==> Done: $zip_path ($(du -h "$zip_path" | cut -f1))"
+}
+
+echo "==> Zipping server function"
+package "$OPEN_NEXT_DIR/server-functions/default" "$APP_DIR/dist-server-lambda.zip"
+
+echo "==> Zipping image optimization function"
+package "$OPEN_NEXT_DIR/image-optimization-function" "$APP_DIR/dist-image-lambda.zip"
+
+echo "==> Static assets to sync separately (not zipped): $OPEN_NEXT_DIR/assets"

@@ -25,6 +25,19 @@ const REFRESH_TOKEN_COOKIE = "refresh_token";
 // but means local dev (main.ts, plain HTTP) never actually receives
 // them back; local testing goes through the DB/service layer directly
 // instead (see auth.service.spec.ts).
+//
+// `domain`: apps/web (e.g. www.<domain>) and this API (api.<domain>)
+// are on different subdomains of the same registrable domain. A cookie
+// set with no explicit `domain` is host-only — scoped to exactly the
+// host that set it (api.<domain>) — so the browser would never send it
+// back on requests to www.<domain>, breaking every server-side fetch
+// apps/web makes on the visitor's behalf. Setting `domain` to the
+// shared parent (".<domain>", e.g. ".pk-literature.example") makes the
+// cookie valid across every subdomain instead. Unset (undefined) in
+// dev/test, where there's no shared parent domain to scope to and the
+// default host-only behavior is what you want against localhost.
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+
 function cookieOptions(maxAgeMs: number) {
   return {
     httpOnly: true,
@@ -32,6 +45,7 @@ function cookieOptions(maxAgeMs: number) {
     sameSite: "lax" as const,
     path: "/",
     maxAge: maxAgeMs,
+    domain: COOKIE_DOMAIN,
   };
 }
 
@@ -74,8 +88,12 @@ export class AuthController {
     if (refreshToken) {
       await this.auth.logout(refreshToken);
     }
-    res.clearCookie(ACCESS_TOKEN_COOKIE, { path: "/" });
-    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/" });
+    // clearCookie must be called with the *same* path+domain the cookie
+    // was originally set with — mismatched attributes make the browser
+    // treat it as clearing a different (non-existent) cookie and the
+    // real one is left behind.
+    res.clearCookie(ACCESS_TOKEN_COOKIE, { path: "/", domain: COOKIE_DOMAIN });
+    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/", domain: COOKIE_DOMAIN });
     return { loggedOut: true };
   }
 

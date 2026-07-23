@@ -1,0 +1,38 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "opennext:build": "open-next build",
+    "package:opennext": "bash scripts/package-opennext.sh"
+  },
+  "dependencies": {
+    "@pk-literature/contracts": "workspace:*",
+    "@pk-literature/domain-types": "workspace:*",
+    "@pk-literature/ui": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "next": "15.5.21",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@opennextjs/aws": "^4.1.0",
+    "@pk-literature/eslint-config": "workspace:*",
+    "@pk-literature/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^20.16.11",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.2",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.6.3"
+  }
+}
