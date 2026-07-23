@@ -206,7 +206,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_admin_from_internet" {
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
-  description       = "HTTPS from the internet - editorial users only reach this via Directus's own auth"
+  description       = "HTTPS from the internet - editorial access is gated by Directus login, not this rule"
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_admin_to_ecs_directus" {
