@@ -76,13 +76,26 @@ data "aws_iam_policy_document" "gha_deploy_assume_role" {
       values   = ["sts.amazonaws.com"]
     }
 
+    # Matches both subject-claim formats GitHub can send: the plain
+    # "repo:org/repo:<ref>" form, and the newer "immutable ID" form
+    # "repo:org@<org-id>/repo@<repo-id>:<ref>" (confirmed this repo/org
+    # actually sends the latter — every StringLike value below used to
+    # be built as the plain form only, which a StringLike condition
+    # never matches against the @id form since neither side has a
+    # wildcard there). The "@*" segments are wildcards, not literal
+    # placeholders — they match with or without an ID suffix, so this
+    # doesn't need updating if GitHub ever changes which form is
+    # default, or if this repo's numeric IDs ever change (e.g. a
+    # transfer).
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        for ref in local.deploy_role_trusted_refs[each.value] :
-        "repo:${var.github_org}/${var.github_repo}:${ref}"
-      ]
+      values = flatten([
+        for ref in local.deploy_role_trusted_refs[each.value] : [
+          "repo:${var.github_org}/${var.github_repo}:${ref}",
+          "repo:${var.github_org}@*/${var.github_repo}@*:${ref}",
+        ]
+      ])
     }
   }
 }
