@@ -3,17 +3,17 @@
 # comment and infrastructure/cost-estimation.md).
 
 aws_region         = "ap-southeast-1"
-domain_name        = "pk-literature.example" # REPLACE before first apply
+domain_name        = "puthagakadai.com" # REPLACE before first apply
 create_hosted_zone = true
-alarm_email        = "alerts@pk-literature.example" # REPLACE before first apply
+alarm_email        = "www.vaidee@gmail.com" # REPLACE before first apply
 azs                = ["ap-southeast-1a", "ap-southeast-1b"]
 
 # Reusing this account's existing VPC (modules/vpc's create_vpc = false
 # mode, main.tf) instead of provisioning a new one — see
 # variables.tf's comment for how to pull the real values.
-existing_vpc_id                          = "vpc-REPLACE_ME"                                                 # REPLACE before first apply
-existing_public_subnet_ids               = ["subnet-REPLACE_ME_PUBLIC_1", "subnet-REPLACE_ME_PUBLIC_2"]     # REPLACE before first apply
-existing_private_isolated_subnet_ids     = ["subnet-REPLACE_ME_ISOLATED_1", "subnet-REPLACE_ME_ISOLATED_2"] # REPLACE before first apply
-existing_private_nat_subnet_ids          = ["subnet-REPLACE_ME_NAT_1", "subnet-REPLACE_ME_NAT_2"]           # REPLACE before first apply
-existing_private_isolated_route_table_id = "rtb-REPLACE_ME"                                                 # REPLACE before first apply
-existing_nat_gateway_ids                 = []                                                               # optional — see variables.tf
+existing_vpc_id                          = "vpc-02c8db6c3e2258401"                                  # REPLACE before first apply
+existing_public_subnet_ids               = ["subnet-06b51e37246fbae4b", "subnet-005a157f3877f0c6b"] # REPLACE before first apply
+existing_private_isolated_subnet_ids     = ["subnet-0ead7c717e0f7ef8e", "subnet-0b79e77d746c41a7c"] # REPLACE before first apply
+existing_private_nat_subnet_ids          = ["subnet-010564041584b7678", "subnet-05526ae30e111671f"] # REPLACE before first apply
+existing_private_isolated_route_table_id = "rtb-0e792ed2933373427"                                  # REPLACE before first apply
+existing_nat_gateway_ids                 = []                                                       # optional — see variables.tf
