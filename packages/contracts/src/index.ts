@@ -4,4 +4,5 @@ export * from "./catalog-api";
 export * from "./feed-api";
 export * from "./search-api";
 export * from "./commerce-api";
+export * from "./identity-api";
 export * from "./events";

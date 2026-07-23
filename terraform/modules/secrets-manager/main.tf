@@ -284,3 +284,30 @@ resource "aws_secretsmanager_secret_version" "medusa_admin" {
   secret_id     = aws_secretsmanager_secret.medusa_admin.id
   secret_string = random_password.medusa_admin.result
 }
+
+# ---------------------------------------------------------------------
+# Phase 7: Identity. A single JWT signing secret
+# (apps/api-identity/src/auth/jwt.service.ts) — unlike Razorpay, this
+# one genuinely can be Terraform-generated (it's not issued by a
+# third party), so no `ignore_changes` placeholder pattern is needed
+# here.
+# ---------------------------------------------------------------------
+
+resource "random_password" "identity_jwt_signing_secret" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "identity_jwt_signing_secret" {
+  name        = "/pk-literature/${var.environment}/identity/jwt-signing-secret"
+  description = "Signs/verifies apps/api-identity's short-lived access-token JWTs"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "identity_jwt_signing_secret" {
+  secret_id     = aws_secretsmanager_secret.identity_jwt_signing_secret.id
+  secret_string = random_password.identity_jwt_signing_secret.result
+}

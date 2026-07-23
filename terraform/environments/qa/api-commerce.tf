@@ -168,3 +168,82 @@ resource "aws_lambda_permission" "api_gateway_invoke_api_commerce" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${module.api_gateway.api_execution_arn}/*/*"
 }
+
+# ---------------------------------------------------------------------
+# Phase 7: UserRegistered consumer (SPEC-07 "Anonymous Merge: ... Cart").
+# A SEPARATE Lambda function from lambda_api_commerce above — same
+# deployment package (apps/api-commerce/dist-lambda.zip bundles both
+# entry points), different handler
+# (dist/src/eventbridge-handler.handler), invoked directly by an
+# EventBridge rule instead of API Gateway. This is the first real
+# EventBridge rule + Lambda target in this repo — every prior phase
+# only ever published events, never consumed one.
+#
+# Placed in the private-isolated tier, not private-nat like
+# lambda_api_commerce — this handler only ever writes to Postgres
+# (commerce.customers, commerce.cart), it never talks to Razorpay, so
+# it has no reason to pay for NAT-tier placement or carry Razorpay
+# secrets.
+# ---------------------------------------------------------------------
+
+data "aws_iam_policy_document" "api_commerce_user_registered_consumer_task" {
+  statement {
+    effect  = "Allow"
+    actions = ["rds-db:connect"]
+    resources = [
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${module.rds_proxy.iam_auth_resource_id}/${local.api_commerce_db_user}",
+    ]
+  }
+}
+
+module "lambda_api_commerce_user_registered_consumer" {
+  source = "../../modules/lambda-service"
+
+  environment  = "qa"
+  service_name = "api-commerce-user-registered-consumer"
+
+  filename         = local.api_commerce_zip
+  source_code_hash = filebase64sha256(local.api_commerce_zip)
+  handler          = "dist/src/eventbridge-handler.handler"
+  runtime          = "nodejs20.x"
+  memory_size      = 256
+  timeout          = 10
+
+  subnet_ids         = module.vpc.private_isolated_subnet_ids
+  security_group_ids = [module.security_groups.lambda_db_sg_id]
+
+  environment_variables = {
+    DB_AUTH_MODE = "iam"
+    PGHOST       = module.rds_proxy.proxy_endpoint
+    PGPORT       = "5432"
+    PGDATABASE   = "pk_literature"
+    PGUSER       = local.api_commerce_db_user
+    AWS_REGION   = data.aws_region.current.name
+  }
+
+  additional_policy_json = data.aws_iam_policy_document.api_commerce_user_registered_consumer_task.json
+}
+
+resource "aws_cloudwatch_event_rule" "user_registered" {
+  name           = "pk-literature-qa-user-registered"
+  event_bus_name = module.eventbridge.bus_name
+  event_pattern = jsonencode({
+    source      = ["pk-literature.api-identity"]
+    detail-type = ["UserRegistered"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "user_registered_to_commerce_consumer" {
+  rule           = aws_cloudwatch_event_rule.user_registered.name
+  event_bus_name = module.eventbridge.bus_name
+  arn            = module.lambda_api_commerce_user_registered_consumer.alias_arn
+}
+
+resource "aws_lambda_permission" "eventbridge_invoke_user_registered_consumer" {
+  statement_id  = "AllowEventBridgeInvokeUserRegisteredConsumer"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_api_commerce_user_registered_consumer.function_name
+  qualifier     = module.lambda_api_commerce_user_registered_consumer.alias_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.user_registered.arn
+}

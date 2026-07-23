@@ -4,6 +4,7 @@
 
 export type ProblemType =
   | "ValidationError"
+  | "Unauthorized"
   | "NotFound"
   | "Conflict"
   | "InternalError";
@@ -11,7 +12,7 @@ export type ProblemType =
 export interface ProblemDetails {
   type: ProblemType;
   title: string;
-  status: 400 | 404 | 409 | 500;
+  status: 400 | 401 | 404 | 409 | 500;
   // Explicitly `| undefined`, not just optional — every consumer builds
   // this object with `exactOptionalPropertyTypes: true`, which
   // distinguishes "key omitted" from "key present with value undefined."
@@ -23,6 +24,7 @@ export interface ProblemDetails {
 
 export const PROBLEM_STATUS: Record<ProblemType, ProblemDetails["status"]> = {
   ValidationError: 400,
+  Unauthorized: 401,
   NotFound: 404,
   Conflict: 409,
   InternalError: 500,

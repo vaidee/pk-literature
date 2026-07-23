@@ -9,7 +9,16 @@ resource "aws_apigatewayv2_api" "this" {
   cors_configuration {
     allow_origins = ["https://${var.domain_name}"]
     allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
-    allow_headers = ["content-type", "authorization"]
+    # x-anonymous-id: every anonymous-scoped route since Phase 4
+    # (api-feed/api-search/api-commerce) reads this custom header — it
+    # was missing from allow_headers this whole time, which silently
+    # broke actual cross-origin browser calls at the CORS-preflight
+    # layer even though every Lambda-level test in this repo passed
+    # (none of them go through a real browser preflight). Fixed here
+    # while wiring api-identity, which is the first service that
+    # genuinely needs credentialed CORS to matter (HTTP-only cookies).
+    allow_headers     = ["content-type", "authorization", "x-anonymous-id"]
+    allow_credentials = true
   }
 
   tags = {
