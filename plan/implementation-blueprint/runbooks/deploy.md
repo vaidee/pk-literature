@@ -122,13 +122,20 @@ aws lambda invoke \
   --cli-binary-format raw-in-base64-out \
   --payload '{}' \
   out.json
-cat out.json   # per-service list of migrations applied this invocation
+cat out.json   # per-service migrations applied + catalog.publishers' current contents
 ```
 
 `{"direction": "down"}` as the payload reverts the most recent
 migration per service (services run in reverse order), mirroring each
 service's own `pnpm migrate:down` — same one-migration-at-a-time
 default as those scripts, not a full rollback.
+
+`out.json` includes `catalog.publishers`' `id`/`code`/`name` after
+every run, so a seed migration's generated UUID (e.g.
+`20260101000009_seed_kalachuvadu_publisher.sql`) is readable straight
+from this invocation's own output — no separate `psql` session needed
+just to find the id a `publisher-import.yml` `workflow_dispatch` input
+wants.
 
 It connects with the RDS **master credential**
 (`/pk-literature/<env>/rds/master` in Secrets Manager —

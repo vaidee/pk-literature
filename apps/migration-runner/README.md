@@ -64,6 +64,14 @@ the right root.
   default as each service's own `pnpm migrate:down`, not a full
   rollback.
 
+  `out.json` (and CloudWatch Logs for the invocation) includes
+  `catalog.publishers`' current contents (`id`/`code`/`name`) after
+  every run — a seed migration's generated UUID (e.g. the Kalachuvadu
+  row `20260101000009_seed_kalachuvadu_publisher.sql` inserts) is
+  readable straight from this invocation's own output, no separate
+  `psql`/SQL client session just to find an id a `workflow_dispatch`
+  input needs (`publisher-import.yml`).
+
 - **Not built or invoked by `terraform-apply.yml`.** A migration run
   is a deliberate action, not a side effect of every infra apply —
   mirrors how `build-directus-image.yml`/`build-medusa-image.yml` are
