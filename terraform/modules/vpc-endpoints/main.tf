@@ -73,9 +73,21 @@ locals {
   # config doesn't own. Empty when create_endpoints = true — nothing
   # to grant, the endpoints created above already have
   # var.endpoint_security_group_id attached directly.
+  #
+  # Keys come from var.existing_interface_endpoint_sg_ids (a plain list
+  # of literal strings) and keys(var.consumer_security_group_ids) — a
+  # map's keys are always known at plan time even when its values
+  # aren't, which matters here because a brand-new consumer security
+  # group's .id (e.g. migration_runner's, created in the same apply
+  # this ingress rule is) is NOT known until after it's created.
+  # Building the for_each key by interpolating that .id directly (the
+  # previous, list(string)-typed version of this variable) hits
+  # "Invalid for_each argument: will be known only after apply" the
+  # first time such a resource is genuinely new — same underlying
+  # Terraform limitation as modules/vpc's chained for_each fix.
   existing_endpoint_ingress_pairs = var.create_endpoints ? {} : {
-    for pair in setproduct(var.existing_interface_endpoint_sg_ids, var.consumer_security_group_ids) :
-    "${pair[0]}-${pair[1]}" => { endpoint_sg_id = pair[0], consumer_sg_id = pair[1] }
+    for pair in setproduct(var.existing_interface_endpoint_sg_ids, keys(var.consumer_security_group_ids)) :
+    "${pair[0]}-${pair[1]}" => { endpoint_sg_id = pair[0], consumer_sg_id = var.consumer_security_group_ids[pair[1]] }
   }
 }
 
