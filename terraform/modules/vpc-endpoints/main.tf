@@ -8,14 +8,24 @@
 # needs to pull a container image (Lambda deployment packages don't go
 # through ECR at all, so nothing needed this before now).
 #
-# var.create_endpoints = false reuses a set of pre-existing endpoints
-# instead of creating these — needed the first time this module ran
-# against a reused (not freshly-created) VPC that already had all six
-# of these from an earlier, unrelated project. AWS allows only one
-# private-DNS-enabled interface endpoint per service per VPC, so
-# creating a second one isn't an option once any exist; a real apply
-# against this account confirmed both the gateway-endpoint route
-# conflict and the interface-endpoint private-DNS conflict.
+# var.create_endpoints = false reuses pre-existing endpoints instead of
+# creating new ones for whichever services genuinely already exist in
+# the account's reused VPC — the S3 gateway endpoint and the
+# secretsmanager interface endpoint, confirmed via a real
+# `aws ec2 describe-vpc-endpoints` (this module's earlier header
+# comment claimed "all six" of these pre-existed from an earlier,
+# unrelated project; that turned out to be wrong for events/logs/
+# ecr.api/ecr.dkr — a live Directus ECS task failing to reach ECR is
+# what surfaced it. AWS allows only one private-DNS-enabled interface
+# endpoint per service per VPC, so the two that DO already exist can't
+# be recreated — a real apply confirmed both the gateway-endpoint route
+# conflict and the secretsmanager interface-endpoint private-DNS
+# conflict). The remaining services
+# (var.interface_endpoints_to_create) are genuinely created by this
+# module even when create_endpoints = false, using
+# var.endpoint_security_group_id like the create_endpoints = true path
+# does — ingress for their actual consumers lives in
+# terraform/modules/security-groups, not here.
 
 resource "aws_vpc_endpoint" "s3" {
   count = var.create_endpoints ? 1 : 0
@@ -42,7 +52,7 @@ locals {
 }
 
 resource "aws_vpc_endpoint" "interface" {
-  for_each = var.create_endpoints ? toset(local.interface_endpoint_services) : toset([])
+  for_each = toset(var.create_endpoints ? local.interface_endpoint_services : var.interface_endpoints_to_create)
 
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.aws_region}.${each.value}"
