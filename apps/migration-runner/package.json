@@ -1,0 +1,25 @@
+{
+  "name": "migration-runner",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "package:lambda": "bash scripts/package-lambda.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.687.0",
+    "node-pg-migrate": "^7.6.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@pk-literature/eslint-config": "workspace:*",
+    "@pk-literature/tsconfig": "workspace:*",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.16.11",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.6.3"
+  }
+}

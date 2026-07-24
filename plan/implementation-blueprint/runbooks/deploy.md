@@ -91,71 +91,78 @@ schemas until step 4 runs.
 
 ## 4. Run migrations against the real RDS instance
 
-**This is the one genuinely unresolved piece of this runbook — read
-this whole section before your first real deploy.**
-
 RDS is deliberately unreachable from anywhere outside the VPC:
 `publicly_accessible = false`, and it sits in the `private-isolated`
 subnet tier, which has **no route to a NAT Gateway or an Internet
 Gateway at all** (`infrastructure/networking.md`). A GitHub
-Actions-hosted runner cannot reach it, full stop — there is no amount
-of security-group tweaking that fixes this, since it's a routing
-problem, not a firewall problem. There is also no SSM
-(`ssmmessages`/`ec2messages`) VPC endpoint, no bastion host, and no
-ECS one-off task or Lambda-based migration runner anywhere in this
-repo today. Every migration `.sql` file in this repo has been tested
-thoroughly against real local Postgres (see each phase's PR
-description) but **never against a real deployed RDS instance**,
-because nothing in this repo can currently reach one.
+Actions-hosted runner cannot reach it directly, full stop — there is
+no amount of security-group tweaking that fixes this, since it's a
+routing problem, not a firewall problem.
 
-Each service owns its own migrations and runs them independently
-against the RDS **master credential** (`/pk-literature/<env>/rds/master`
-in Secrets Manager — Terraform/migration-runner bootstrap only, never
-used by the app roles themselves, `infrastructure/secrets.md`):
+This is solved via **`apps/migration-runner`**, a dedicated one-off
+Lambda (option 3 from this section's earlier draft — a Lambda's
+execution environment *is* inside the VPC, unlike a CI runner). It is
+not wired to API Gateway and has no HTTP trigger; applying its
+Terraform (`terraform/environments/<env>/migration-runner.tf`) changes
+nothing at runtime by itself. It runs each service's migrations
+in-process via `node-pg-migrate`'s programmatic API, in this fixed
+order (api-catalog first, since the others' `*_role.sql` migrations
+grant against schemas/roles api-catalog's own migrations create):
 
 ```sh
-# from inside the VPC, once you have a path in — see options below
-cd apps/api-catalog   && pnpm migrate:up
-cd apps/api-feed       && pnpm migrate:up
-cd apps/api-search     && pnpm migrate:up
-cd apps/api-commerce   && pnpm migrate:up
-cd apps/api-identity   && pnpm migrate:up
+# 1. Build + package (from repo root)
+bash apps/migration-runner/scripts/package-lambda.sh
+
+# 2. terraform apply (from terraform/environments/<env>) so the
+#    Lambda's code is up to date, if it changed
+
+# 3. Invoke it — this is the step that actually runs migrations
+aws lambda invoke \
+  --function-name pk-literature-<env>-migration-runner \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{}' \
+  out.json
+cat out.json   # per-service list of migrations applied this invocation
 ```
+
+`{"direction": "down"}` as the payload reverts the most recent
+migration per service (services run in reverse order), mirroring each
+service's own `pnpm migrate:down` — same one-migration-at-a-time
+default as those scripts, not a full rollback.
+
+It connects with the RDS **master credential**
+(`/pk-literature/<env>/rds/master` in Secrets Manager —
+Terraform/migration-runner bootstrap only, never used by the app roles
+themselves, `infrastructure/secrets.md`), resolved at cold start via
+the Secrets Manager SDK rather than a plain Lambda environment
+variable — it has to be the master user, since the app DB roles each
+service's migrations grant (`catalog_api_readonly`, etc.) don't exist
+until api-catalog's migrations create them.
 
 (`api-publisher-import` has no migrations of its own — its DB role is
 created by `api-catalog`'s migrations, since `api-catalog` owns the
-`staging`/`catalog` schemas it grants access to.)
+`staging`/`catalog` schemas it grants access to, so it isn't one of
+the 5 services `apps/migration-runner` runs.)
 
-**Options to actually get a path into the VPC** (pick one — none of
-these are wired up yet, this is a decision to make, not a step to
-follow):
+This has been built and typechecks, and its packaging script has been
+run end-to-end locally to confirm the zip's layout is correct, but —
+same disclosed limitation as every other piece of this runbook — **it
+has not yet been invoked against a real deployed RDS instance**,
+because nothing in this repo could reach one until this Lambda
+existed. Run it for real before trusting this section blindly.
 
-1. **SSM port-forwarding through a throwaway instance.** Add the
-   `ssmmessages`/`ec2messages`/`ssm` interface endpoints to
-   `terraform/modules/vpc-endpoints`, launch a tiny EC2 instance (or a
-   one-off Fargate task with the SSM agent) in a private subnet with
-   the `lambda_db_sg` security group, `aws ssm start-session` with
-   `--document-name AWS-StartPortForwardingClient` to tunnel local
-   `5432` to the RDS Proxy endpoint, run migrations from your laptop
-   against `localhost:5432`, tear the instance down. No public IP, no
-   SSH key, no bastion security group ever open to `0.0.0.0/0`.
-2. **A one-off ECS Fargate task**, same image concept as
-   `apps/directus`/`apps/medusa` but running `node-pg-migrate` instead
-   of a long-lived server — `aws ecs run-task` from CI (which *can*
-   reach the AWS API even though it can't reach the VPC directly),
-   using the existing `ecs-service` module's IAM/networking patterns
-   but a `run-task`-style invocation instead of a persistent service.
-3. **A dedicated migration-runner Lambda**, invoked once via `aws lambda
-   invoke` from CI after every apply — packages each service's
-   `migrations/` directory and runs `node-pg-migrate` inside the Lambda
-   execution environment (which *is* inside the VPC, unlike the CI
-   runner). Closest in shape to what already exists (`lambda-service`
-   module), but is a genuinely new Lambda, not a repurposing of an
-   existing one — none of the 8 app Lambdas should run migrations as a
-   side effect of a normal invocation.
+Two other options were considered and are documented here only as
+alternatives, not built:
 
-Whichever of these you pick, update this section once it exists —
-right now it correctly describes a gap, not a mechanism.
+1. **SSM port-forwarding through a throwaway instance** — add
+   `ssmmessages`/`ec2messages`/`ssm` interface endpoints, launch a
+   temporary EC2/Fargate-with-SSM-agent instance, tunnel local `5432`
+   to the RDS Proxy endpoint, run migrations from your laptop. More
+   moving parts than a Lambda for the same result.
+2. **A one-off ECS Fargate task** running `node-pg-migrate` instead of
+   a long-lived server, via `aws ecs run-task`. Viable, but the Lambda
+   above reuses `lambda_db_sg_id` and the existing `lambda-service`
+   module unchanged, so it needed no new security-group wiring.
 
 ---
 
