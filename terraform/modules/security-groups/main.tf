@@ -69,7 +69,7 @@ resource "aws_security_group" "lambda_egress" {
 resource "aws_security_group" "vpc_endpoints" {
   name_prefix = "pk-literature-${var.environment}-vpc-endpoints-"
   vpc_id      = var.vpc_id
-  description = "Interface VPC endpoints (Secrets Manager, EventBridge, CloudWatch Logs) - inbound 443 from the private-isolated tier"
+  description = "Interface VPC endpoints this config creates (ECR api/dkr, EventBridge) - inbound 443 from their actual consumers"
 
   tags = {
     Name        = "pk-literature-${var.environment}-vpc-endpoints"
@@ -157,7 +157,22 @@ resource "aws_vpc_security_group_egress_rule" "lambda_egress_to_rds_proxy" {
   description                  = "Postgres to RDS Proxy (Commerce Lambda needs both DB and Razorpay)"
 }
 
-# --- vpc-endpoints-sg: ingress 443 from lambda-db-sg ---
+# --- vpc-endpoints-sg: ingress 443 from every consumer of the
+# ecr.api/ecr.dkr/events interface endpoints this SG fronts
+# (terraform/environments/prod/main.tf's interface_endpoints_to_create
+# — the ones genuinely created by this Terraform config, as opposed to
+# the reused secretsmanager/S3 endpoints owned by another project's
+# security groups). ecs_directus/ecs_medusa need ECR (image pull +
+# registry auth) and events (their own direct PutEvents callers);
+# lambda_db covers every private-isolated Lambda's own PutEvents calls
+# (api-identity/api-publisher-import); lambda_egress covers
+# api-commerce's. Medusa/api-commerce also have real internet egress
+# via NAT, but that doesn't substitute for this: interface endpoints'
+# private DNS overrides the public hostname for every resource in the
+# VPC once the endpoint exists, regardless of which subnet/NAT
+# configuration the caller sits in — confirmed directly by Directus's
+# ECS task timing out against ECR's public IP before these endpoints
+# existed at all. ---
 
 resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_db" {
   security_group_id            = aws_security_group.vpc_endpoints.id
@@ -166,6 +181,15 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_db" {
   to_port                      = 443
   ip_protocol                  = "tcp"
   description                  = "HTTPS from private-isolated-tier Lambda/ECS clients"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_egress" {
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.lambda_egress.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS from private-nat-tier Lambda (api-commerce's own PutEvents calls)"
 }
 
 # ---------------------------------------------------------------------
@@ -252,6 +276,15 @@ resource "aws_vpc_security_group_egress_rule" "ecs_directus_to_vpc_endpoints" {
   description = "HTTPS to S3/Secrets Manager/EventBridge/ECR interface endpoints"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_ecs_directus" {
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.ecs_directus.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS from Directus ECS task (ECR image pull/registry auth, its own PutEvents calls)"
+}
+
 # ---------------------------------------------------------------------
 # Phase 6: Medusa ECS task. Unlike ecs-directus (private-isolated, no
 # internet route), this one lives in the private-nat tier — it's the
@@ -315,4 +348,18 @@ resource "aws_vpc_security_group_egress_rule" "ecs_medusa_to_internet" {
   to_port           = 443
   ip_protocol       = "tcp"
   description       = "HTTPS egress (Razorpay, Secrets Manager, EventBridge, ECR) via NAT Gateway"
+}
+
+# NAT gives Medusa real internet egress, but that alone doesn't reach
+# ecr.api/ecr.dkr/events once those interface endpoints exist: private
+# DNS overrides the public hostname for every VPC resource regardless
+# of subnet, so Medusa's own calls get redirected here too and need
+# this ingress rule the same as Directus's.
+resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_ecs_medusa" {
+  security_group_id            = aws_security_group.vpc_endpoints.id
+  referenced_security_group_id = aws_security_group.ecs_medusa.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS from Medusa ECS task (ECR image pull/registry auth, its own PutEvents calls)"
 }

@@ -63,23 +63,36 @@ module "vpc_endpoints" {
   endpoint_security_group_id       = module.security_groups.vpc_endpoints_sg_id
 
   # This account's reused VPC (main.tf's "existing VPC" module.vpc call)
-  # already has all six of these endpoints from an earlier, unrelated
-  # project — a real apply confirmed both the S3 gateway endpoint's
-  # route-table conflict and the interface endpoints' private-DNS
-  # conflict when this tried to create duplicates. See
-  # modules/vpc-endpoints' header comment.
-  create_endpoints                   = false
+  # only actually has the S3 gateway endpoint and the secretsmanager
+  # interface endpoint from an earlier, unrelated project — confirmed
+  # via a real `aws ec2 describe-vpc-endpoints` after Directus's ECS
+  # task failed to reach ECR at all (no NAT, and no ecr.api endpoint
+  # either). events/logs/ecr.api/ecr.dkr were never actually there
+  # despite this file's old comment claiming "all six" pre-existed; see
+  # modules/vpc-endpoints' header comment for the corrected story.
+  create_endpoints = false
+  # ecr.api/ecr.dkr: Directus's and Medusa's ECS tasks both need these
+  # to pull their images / fetch registry auth. events: Directus's
+  # eventbridge-put-event extension, Medusa's eventbridge-order-placed
+  # subscriber, and api-identity/api-commerce/api-publisher-import's
+  # own eventbridge.service.ts all call PutEvents directly. logs is
+  # deliberately left out — nothing here calls the CloudWatch Logs API
+  # directly (Lambda's own log shipping doesn't route through the VPC
+  # ENI at all, so it doesn't need this endpoint).
+  interface_endpoints_to_create      = ["ecr.api", "ecr.dkr", "events"]
   existing_interface_endpoint_sg_ids = var.existing_interface_endpoint_sg_ids
-  # ecs_medusa_sg was missing here — Medusa's tasks sit in the
-  # private-nat tier (medusa.tf), but the reused endpoints' private DNS
-  # still redirects secretsmanager.<region>.amazonaws.com to the
-  # endpoint ENI for every resource in the VPC regardless of subnet, so
-  # NAT egress doesn't help: without an ingress rule on the endpoint's
-  # security group, GetSecretValue calls time out
-  # ("ResourceInitializationError: ... context deadline exceeded")
-  # instead of ever reaching the internet.
+  # ecs_medusa_sg and lambda_egress_sg were both missing here originally
+  # — Medusa's and api-commerce's tasks sit outside private-isolated
+  # (medusa.tf/api-commerce.tf), but the reused secretsmanager
+  # endpoint's private DNS still redirects
+  # secretsmanager.<region>.amazonaws.com to the endpoint ENI for every
+  # resource in the VPC regardless of subnet, so NAT egress doesn't
+  # help: without an ingress rule on the endpoint's security group,
+  # GetSecretValue calls time out ("ResourceInitializationError: ...
+  # context deadline exceeded") instead of ever reaching the internet.
   consumer_security_group_ids = [
     module.security_groups.lambda_db_sg_id,
+    module.security_groups.lambda_egress_sg_id,
     module.security_groups.ecs_directus_sg_id,
     module.security_groups.ecs_medusa_sg_id,
   ]
