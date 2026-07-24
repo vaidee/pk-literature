@@ -37,6 +37,19 @@ resource "aws_cloudfront_origin_access_control" "image_lambda" {
   signing_protocol                  = "sigv4"
 }
 
+# AWS-managed policies, looked up by name rather than hardcoded ID so
+# this doesn't depend on getting a UUID right from memory. Used only by
+# the server Lambda origin's default_cache_behavior below — see that
+# block's comment for why a Lambda-Function-URL-behind-OAC origin needs
+# these specifically instead of the legacy forwarded_values API.
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
 resource "aws_cloudfront_distribution" "this" {
   enabled         = true
   is_ipv6_enabled = true
@@ -84,38 +97,32 @@ resource "aws_cloudfront_distribution" "this" {
   # anonymous_id/auth cookies on every request), so nothing here is
   # cacheable at the edge; this behavior exists to route requests to the
   # server Lambda and forward what it needs, not to cache responses.
+  #
+  # Uses the modern cache-policy/origin-request-policy resources, not
+  # the legacy forwarded_values API — this is AWS's own documented
+  # pattern for an origin signed via Origin Access Control (OAC), which
+  # computes a SigV4 signature over the request CloudFront actually
+  # sends. A first attempt just removed "Host" from forwarded_values'
+  # header allowlist (the known reason forwarding Host breaks OAC
+  # signing for a custom origin) and that alone wasn't sufficient — a
+  # real `curl -v` still showed a 403 AccessDeniedException straight
+  # from the Function URL after that fix was live and confirmed applied
+  # (every other piece of the OAC/IAM chain was independently verified
+  # correct via the AWS CLI: resource policy, SourceArn, AuthType,
+  # origin domain). Managed-AllViewerExceptHostHeader is the policy AWS
+  # documents specifically for OAC-signed custom origins — it forwards
+  # everything the legacy config did (all cookies, all headers except
+  # Host, all query strings) through the officially-supported path
+  # instead of the legacy one, on the chance the legacy API has some
+  # other OAC-signing quirk beyond just the Host header.
   default_cache_behavior {
-    target_origin_id       = local.server_origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-
-    forwarded_values {
-      query_string = true
-      # NOT "Host" — this origin is signed via Origin Access Control
-      # (OAC), and CloudFront computes that SigV4 signature over the
-      # request it actually sends, including whatever Host header
-      # forwarding puts there. Forwarding the viewer's Host
-      # (puthagakadai.com) instead of leaving CloudFront to send the
-      # Lambda Function URL's own host makes the signature the Function
-      # URL service validates against not match what it expects,
-      # producing a 403 AccessDeniedException straight from the
-      # Function URL — confirmed via a real `curl -v` showing exactly
-      # that error, with every other piece of the OAC/IAM chain
-      # (resource policy, SourceArn, AuthType, origin domain) verified
-      # correct via the AWS CLI first. Nothing in apps/web's code reads
-      # the incoming Host header, so dropping it is a no-op for the app
-      # itself.
-      headers = ["Accept"]
-      cookies {
-        forward = "all"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
+    target_origin_id         = local.server_origin_id
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   # next.config.ts / @opennextjs/aws emit /_next/static/* with
