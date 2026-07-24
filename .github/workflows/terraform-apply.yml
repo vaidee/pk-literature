@@ -82,6 +82,9 @@ jobs:
       - name: Build api-identity Lambda package
         run: bash scripts/package-lambda.sh
         working-directory: apps/api-identity
+      - name: Build migration-runner Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/migration-runner
       - name: Build apps/web OpenNext packages
         run: bash scripts/package-opennext.sh
         working-directory: apps/web
