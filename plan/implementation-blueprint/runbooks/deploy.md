@@ -225,18 +225,19 @@ you do. Directus/Medusa's own secrets (DB password, `KEY`/`SECRET`,
 JWT/cookie secrets, admin passwords) and `identity/jwt-signing-secret`
 are all genuinely Terraform-generated and need no manual step.
 
-Grant `rds_iam` to every IAM-auth DB role — this only exists on real
-RDS, so it's not part of any migration and must be run once per
-environment after step 4's migrations have created the roles:
-
-```sql
-GRANT rds_iam TO catalog_api_readonly;
-GRANT rds_iam TO publisher_import_writer;
-GRANT rds_iam TO feed_api_rw;
-GRANT rds_iam TO search_api_readonly;
-GRANT rds_iam TO commerce_api_rw;
-GRANT rds_iam TO identity_api_rw;
-```
+Every IAM-auth DB role needs `rds_iam` granted — this only exists on
+real RDS, not vanilla Postgres, which is why the role-creation
+migrations (`*_role.sql`) never granted it themselves. It's now its
+own migration per service (`*_grant_rds_iam.sql`, one per service that
+owns an IAM-auth role — `medusa_app` is excluded, since Medusa
+connects with a stored password, not RDS Proxy IAM auth), each guarded
+with `IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname =
+'rds_iam')` so it's a safe no-op against local/CI Postgres and a real
+grant against RDS — no separate manual step, just part of the normal
+`apps/migration-runner` invoke (step 4). Verified locally end-to-end
+against a real Postgres instance: runs clean as a no-op without
+`rds_iam` present, and actually grants membership (confirmed via
+`pg_auth_members`) once it is.
 
 (`directus_app` and `medusa_app` don't need this — they use stored
 passwords, not RDS Proxy IAM auth; `infrastructure/secrets.md`'s
