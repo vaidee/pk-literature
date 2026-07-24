@@ -1,0 +1,87 @@
+name: One-off Terraform Import (temporary)
+
+# TEMPORARY, throwaway workflow — created to fix a specific Terraform
+# state/reality drift on
+# module.vpc_endpoints.aws_vpc_security_group_ingress_rule.existing_endpoint_access
+# ["sg-03e60ba1e04d0d268-sg-06465f39e0e75e238"] that kept recurring
+# across several terraform-apply.yml runs (state said the tracked rule
+# ID was missing on refresh, then creating a fresh one hit
+# InvalidPermission.Duplicate against AWS). CloudShell's 1GB storage
+# cap can't fit the aws provider (several hundred MB) alongside
+# node_modules, so this runs the import in CI instead, which already
+# has working OIDC credentials and plenty of disk. No `environment:
+# prod` gate — `terraform import` only updates Terraform's own state
+# bookkeeping to match what's already true in AWS; it makes zero
+# infrastructure changes, so the manual-approval gate that guards real
+# applies doesn't apply here.
+#
+# Delete this file once the import is confirmed and the next real
+# terraform-apply.yml run succeeds.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Build api-catalog Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-catalog
+      - name: Build api-publisher-import Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-publisher-import
+      - name: Build api-feed Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-feed
+      - name: Build api-search Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-search
+      - name: Build api-commerce Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-commerce
+      - name: Build api-identity Lambda package
+        run: bash scripts/package-lambda.sh
+        working-directory: apps/api-identity
+      - name: Build apps/web OpenNext packages
+        run: bash scripts/package-opennext.sh
+        working-directory: apps/web
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: ap-southeast-1
+      - name: terraform init
+        working-directory: terraform/environments/prod
+        run: terraform init -input=false
+      - name: Import the drifted security group rule
+        working-directory: terraform/environments/prod
+        run: |
+          RULE_ID=$(aws ec2 describe-security-group-rules \
+            --filters Name=group-id,Values=sg-03e60ba1e04d0d268 \
+            --query "SecurityGroupRules[?ReferencedGroupInfo.GroupId=='sg-06465f39e0e75e238'].SecurityGroupRuleId | [0]" \
+            --output text)
+          echo "Rule ID to import: $RULE_ID"
+          if [ -z "$RULE_ID" ] || [ "$RULE_ID" = "None" ]; then
+            echo "No matching rule found on sg-03e60ba1e04d0d268 for peer sg-06465f39e0e75e238 — nothing to import."
+            exit 1
+          fi
+          terraform import \
+            'module.vpc_endpoints.aws_vpc_security_group_ingress_rule.existing_endpoint_access["sg-03e60ba1e04d0d268-sg-06465f39e0e75e238"]' \
+            "$RULE_ID"
+      - name: Confirm with a plan
+        working-directory: terraform/environments/prod
+        run: terraform plan -input=false
