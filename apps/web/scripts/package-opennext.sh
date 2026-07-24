@@ -12,10 +12,11 @@
 #
 # NOT produced by this script: an upload of .open-next/assets (the
 # /_next/static/* + public/ build output the S3 origin serves). That's
-# a bulk `aws s3 sync` with per-file content-type/cache-control
-# headers, not a Lambda deployment package — Terraform doesn't model
-# that well, so it's a documented CI/deploy-pipeline step
-# (runbooks/deploy.md), not something this script or Terraform does.
+# a bulk `aws s3 sync` with per-file cache-control headers plus a
+# CloudFront invalidation, not a Lambda deployment package — Terraform
+# doesn't model that well, so it's a separate step in
+# .github/workflows/terraform-apply.yml (after `terraform apply`), not
+# something this script or Terraform itself does.
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

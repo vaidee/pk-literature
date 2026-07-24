@@ -25,3 +25,13 @@ output "eventbridge_bus_name" {
 output "hosted_zone_id" {
   value = module.route53_acm.zone_id
 }
+
+output "web_static_assets_bucket_id" {
+  description = "apps/web's OpenNext static assets bucket — terraform-apply.yml syncs .open-next/assets here after apply."
+  value       = module.opennext.static_assets_bucket_id
+}
+
+output "web_distribution_id" {
+  description = "apps/web's own CloudFront distribution (separate from module.cloudfront's media/cdn one) — invalidated after the static asset sync."
+  value       = module.cloudfront_web.distribution_id
+}

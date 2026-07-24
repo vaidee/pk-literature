@@ -29,14 +29,15 @@ name: Deploy
 # medusa_image_tag by hand) — it goes through the same approval gate.
 #
 # App deploy steps beyond api-catalog: apps/web's OpenNext packages are
-# built here (scripts/package-opennext.sh), but the built .open-next/
-# assets still need a separate `aws s3 sync` + CloudFront invalidation
-# step this workflow does not yet do — see apps/web/README.md's
-# Deploying section. Directus/Medusa images are NOT built/deployed by
-# this workflow at all — those are gated, manual-trigger-only workflows
-# (build-directus-image.yml/build-medusa-image.yml), run separately
-# before bumping directus_image_tag/medusa_image_tag and re-running this
-# workflow to roll the new tag out.
+# built here (scripts/package-opennext.sh) and, after `terraform apply`
+# creates/updates the S3 bucket + CloudFront distribution, the built
+# .open-next/assets get synced to that bucket and the distribution
+# invalidated — see the last two steps below. Directus/Medusa images
+# are NOT built/deployed by this workflow at all — those are gated,
+# manual-trigger-only workflows (build-directus-image.yml/
+# build-medusa-image.yml), run separately before bumping
+# directus_image_tag/medusa_image_tag and re-running this workflow to
+# roll the new tag out.
 
 on:
   push:
@@ -95,6 +96,30 @@ jobs:
         run: |
           terraform init -input=false
           terraform apply -input=false -auto-approve
+      - name: Sync OpenNext static assets to S3
+        working-directory: terraform/environments/prod
+        run: |
+          BUCKET=$(terraform output -raw web_static_assets_bucket_id)
+          ASSETS_DIR="../../../apps/web/.open-next/assets"
+          # _next/static/* is content-hashed by Next.js itself (a build
+          # producing different output gets a different filename), so it's
+          # safe to cache forever — everything else (the copied public/
+          # directory, plus any non-hashed _next output) isn't, and should
+          # revalidate on every request instead.
+          aws s3 sync "$ASSETS_DIR" "s3://$BUCKET" \
+            --delete \
+            --exclude "_next/static/*" \
+            --cache-control "public,max-age=0,must-revalidate"
+          if [ -d "$ASSETS_DIR/_next/static" ]; then
+            aws s3 sync "$ASSETS_DIR/_next/static" "s3://$BUCKET/_next/static" \
+              --delete \
+              --cache-control "public,max-age=31536000,immutable"
+          fi
+      - name: Invalidate apps/web CloudFront distribution
+        working-directory: terraform/environments/prod
+        run: |
+          DIST_ID=$(terraform output -raw web_distribution_id)
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
 
   smoke-test:
     needs: apply
