@@ -45,7 +45,7 @@ variable "existing_interface_endpoint_sg_ids" {
 }
 
 variable "consumer_security_group_ids" {
-  description = "Only used when create_endpoints = false. Security groups (Lambda/ECS) that need to reach the existing (reused) interface endpoints — each gets an ingress rule added to every existing_interface_endpoint_sg_ids entry. Endpoints this module creates itself (interface_endpoints_to_create) are reached via endpoint_security_group_id's own ingress rules instead, managed in terraform/modules/security-groups, not here."
-  type        = list(string)
-  default     = []
+  description = "Only used when create_endpoints = false. Map of a short, caller-chosen name (e.g. \"lambda_db\", \"migration_runner\") to each security group (Lambda/ECS) that needs to reach the existing (reused) interface endpoints — each value gets an ingress rule added to every existing_interface_endpoint_sg_ids entry. A map, not a list: the for_each below needs a plan-time-known key, and a brand-new consumer security group's .id isn't known until after it's created in the same apply — the map's keys (plain strings the caller writes) are known regardless, only the values (the actual .id references) are deferred. Endpoints this module creates itself (interface_endpoints_to_create) are reached via endpoint_security_group_id's own ingress rules instead, managed in terraform/modules/security-groups, not here."
+  type        = map(string)
+  default     = {}
 }

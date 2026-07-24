@@ -90,17 +90,21 @@ module "vpc_endpoints" {
   # help: without an ingress rule on the endpoint's security group,
   # GetSecretValue calls time out ("ResourceInitializationError: ...
   # context deadline exceeded") instead of ever reaching the internet.
-  consumer_security_group_ids = [
-    module.security_groups.lambda_db_sg_id,
-    module.security_groups.lambda_egress_sg_id,
-    module.security_groups.ecs_directus_sg_id,
-    module.security_groups.ecs_medusa_sg_id,
-    # migration-runner fetches the RDS master credential from Secrets
-    # Manager too, even though it bypasses RDS Proxy entirely for the
-    # actual DB connection (security-groups module's migration_runner
-    # SG header comment).
-    module.security_groups.migration_runner_sg_id,
-  ]
+  #
+  # A map, not a list — modules/vpc-endpoints' for_each needs a
+  # plan-time-known key for each entry, and migration_runner_sg_id is a
+  # brand-new security group's .id in the same apply that first added
+  # it here, which isn't known until after it's created ("Invalid
+  # for_each argument: will be known only after apply", a real error
+  # from that exact apply). The map's keys are plain strings this file
+  # writes, known regardless of whether the values are still deferred.
+  consumer_security_group_ids = {
+    lambda_db        = module.security_groups.lambda_db_sg_id
+    lambda_egress    = module.security_groups.lambda_egress_sg_id
+    ecs_directus     = module.security_groups.ecs_directus_sg_id
+    ecs_medusa       = module.security_groups.ecs_medusa_sg_id
+    migration_runner = module.security_groups.migration_runner_sg_id
+  }
 }
 
 module "secrets_manager" {
