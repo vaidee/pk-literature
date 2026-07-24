@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Client } from "pg";
 import runner from "node-pg-migrate";
 import { resolveMasterCredential } from "./resolve-master-credential";
 
@@ -26,6 +27,22 @@ interface ServiceResult {
   migrationsRun: string[];
 }
 
+interface PublisherRow {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface RunnerResult {
+  services: ServiceResult[];
+  // catalog.publishers' current contents, logged (and returned) so a
+  // seed migration's generated UUID is readable straight from this
+  // invocation's own output/CloudWatch Logs — no separate psql session
+  // just to find the id a workflow_dispatch input needs
+  // (runbooks/deploy.md's publisher-import.yml step).
+  publishers: PublisherRow[];
+}
+
 // Order matters: api-catalog's migrations create the catalog/staging
 // schemas and roles (catalog_api_readonly, publisher_import_writer,
 // ...) that api-feed/api-search/api-commerce/api-identity's own
@@ -47,7 +64,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-export async function handler(event: MigrationRunnerEvent = {}): Promise<ServiceResult[]> {
+export async function handler(event: MigrationRunnerEvent = {}): Promise<RunnerResult> {
   const direction = event.direction ?? "up";
   const { username, password } = await resolveMasterCredential();
 
@@ -91,5 +108,30 @@ export async function handler(event: MigrationRunnerEvent = {}): Promise<Service
     }
   }
 
-  return results;
+  const publishers = await fetchPublishers(databaseUrl);
+  console.log(`==> catalog.publishers: ${JSON.stringify(publishers)}`);
+
+  return { services: results, publishers };
+}
+
+// Separate connection from runner()'s own (node-pg-migrate opens and
+// closes its own client internally per call, not something this can
+// reuse) — same databaseUrl, so the same master credential and CA
+// bundle apply.
+async function fetchPublishers(databaseUrl: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl: { rejectUnauthorized: boolean; ca: string };
+}): Promise<PublisherRow[]> {
+  const client = new Client(databaseUrl);
+  await client.connect();
+  try {
+    const { rows } = await client.query<PublisherRow>("SELECT id, code, name FROM catalog.publishers ORDER BY created_at");
+    return rows;
+  } finally {
+    await client.end();
+  }
 }
