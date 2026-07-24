@@ -189,7 +189,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_from_lambda_egress
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
-  description                  = "HTTPS from private-nat-tier Lambda (api-commerce's own PutEvents calls)"
+  description                  = "HTTPS from private-nat-tier Lambda (api-commerce PutEvents calls)"
 }
 
 # ---------------------------------------------------------------------
