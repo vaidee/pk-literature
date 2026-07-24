@@ -81,7 +81,7 @@ resource "aws_security_group" "vpc_endpoints" {
   }
 }
 
-# --- rds-sg: ingress 5432 from rds-proxy-sg only ---
+# --- rds-sg: ingress 5432 from rds-proxy-sg, plus migration-runner-sg directly ---
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_proxy" {
   security_group_id            = aws_security_group.rds.id
@@ -90,6 +90,62 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_proxy" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
   description                  = "Postgres from RDS Proxy"
+}
+
+# ---------------------------------------------------------------------
+# apps/migration-runner: the one client that connects to RDS directly,
+# bypassing the proxy entirely. RDS Proxy's iam_auth = REQUIRED on the
+# master secret's auth entry (modules/rds-proxy) is deliberate — RDS
+# doesn't support IAM database authentication for the master user at
+# all, so nothing can ever authenticate as master through that proxy,
+# password or IAM. migration-runner needs the master user specifically
+# (the app DB roles its own migrations grant don't exist yet on a cold
+# start), so it connects straight to RDS's own endpoint instead.
+# ---------------------------------------------------------------------
+
+resource "aws_security_group" "migration_runner" {
+  name_prefix = "pk-literature-${var.environment}-migration-runner-"
+  vpc_id      = var.vpc_id
+  description = "migration-runner Lambda - direct RDS access with the master credential, bypassing RDS Proxy"
+
+  tags = {
+    Name        = "pk-literature-${var.environment}-migration-runner"
+    Environment = var.environment
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "migration_runner_to_rds" {
+  security_group_id            = aws_security_group.migration_runner.id
+  referenced_security_group_id = aws_security_group.rds.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "Postgres directly to RDS (not via RDS Proxy)"
+}
+
+resource "aws_vpc_security_group_egress_rule" "migration_runner_to_vpc_endpoints" {
+  security_group_id = aws_security_group.migration_runner.id
+  # CIDR, not an SG reference — same reasoning as lambda_db_to_vpc_endpoints:
+  # the Secrets Manager endpoint it reaches (for the master credential)
+  # is a reused one this config doesn't own.
+  cidr_ipv4   = var.vpc_cidr
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+  description = "HTTPS to Secrets Manager (RDS master credential)"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_migration_runner" {
+  security_group_id            = aws_security_group.rds.id
+  referenced_security_group_id = aws_security_group.migration_runner.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "Postgres from migration-runner Lambda, direct (not via RDS Proxy)"
 }
 
 # --- rds-proxy-sg: ingress 5432 from lambda-db-sg; egress 5432 to rds-sg ---

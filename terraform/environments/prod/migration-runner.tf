@@ -8,18 +8,25 @@
 # must be run before `terraform apply` touches this file, same as
 # every other Lambda service.
 #
-# Reuses lambda_db_sg_id unchanged: it's already permitted to reach
-# both the RDS Proxy (5432) and the Secrets Manager interface endpoint
-# (terraform/modules/vpc-endpoints) — the same two things every other
-# DB-connected Lambda already needs, so no new security-group wiring
-# was required for this one.
-#
 # Connects with the RDS master credential (Secrets Manager, resolved
 # at cold start — never a plain Lambda environment variable, per
 # infrastructure/secrets.md), not RDS Proxy IAM auth: the app DB roles
 # each service's own migrations grant (catalog_api_readonly, etc.)
 # don't exist until api-catalog's migrations create them, so nothing
 # but the master user can run migrations from a cold start.
+#
+# Connects DIRECTLY to RDS, bypassing RDS Proxy entirely — confirmed by
+# a real "IAM authentication failed for the role pk_literature_admin"
+# error that a stored-password connection through the proxy produces.
+# RDS doesn't support IAM database authentication for the master user
+# at all, and the proxy's master auth entry deliberately keeps
+# iam_auth = REQUIRED (modules/rds-proxy's header comment), so no
+# master connection — password or IAM — can ever succeed through the
+# proxy. Uses its own dedicated security group
+# (security-groups' migration_runner SG) rather than reusing
+# lambda_db_sg_id, since this is the one Lambda with direct network
+# access to RDS's own port — keeping that grant scoped to exactly this
+# function.
 
 locals {
   migration_runner_zip = "${path.module}/../../../apps/migration-runner/dist-lambda.zip"
@@ -50,16 +57,17 @@ module "lambda_migration_runner" {
   timeout = 120
 
   # private-isolated tier, same as every other DB-connected Lambda
-  # (infrastructure/networking.md) — reaches RDS Proxy and Secrets
-  # Manager purely intra-VPC, no NAT/internet needed.
+  # (infrastructure/networking.md) — reaches RDS and Secrets Manager
+  # purely intra-VPC, no NAT/internet needed.
   subnet_ids         = module.vpc.private_isolated_subnet_ids
-  security_group_ids = [module.security_groups.lambda_db_sg_id]
+  security_group_ids = [module.security_groups.migration_runner_sg_id]
 
   environment_variables = {
     RDS_MASTER_SECRET_ARN = module.secrets_manager.rds_master_secret_arn
-    PGHOST                = module.rds_proxy.proxy_endpoint
-    PGPORT                = "5432"
-    PGDATABASE            = "pk_literature"
+    # RDS's own endpoint, not RDS Proxy — see file header comment.
+    PGHOST     = module.rds.db_address
+    PGPORT     = tostring(module.rds.db_port)
+    PGDATABASE = "pk_literature"
   }
 
   additional_policy_json   = data.aws_iam_policy_document.migration_runner_secrets.json

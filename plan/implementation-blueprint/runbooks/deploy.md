@@ -139,17 +139,31 @@ variable — it has to be the master user, since the app DB roles each
 service's migrations grant (`catalog_api_readonly`, etc.) don't exist
 until api-catalog's migrations create them.
 
+It connects **directly to RDS, not through RDS Proxy** — a real first
+invocation failed with `The IAM authentication failed for the role
+pk_literature_admin`, because RDS doesn't support IAM database
+authentication for the master user at all, and the proxy's master auth
+entry deliberately requires IAM auth (`modules/rds-proxy`'s header
+comment), so no master connection can ever succeed through the proxy,
+password or IAM. It uses its own dedicated security group
+(`migration_runner`, `modules/security-groups`) with a direct ingress
+grant on RDS's own security group, rather than going through the proxy
+like every other service does.
+
 (`api-publisher-import` has no migrations of its own — its DB role is
 created by `api-catalog`'s migrations, since `api-catalog` owns the
 `staging`/`catalog` schemas it grants access to, so it isn't one of
 the 5 services `apps/migration-runner` runs.)
 
-This has been built and typechecks, and its packaging script has been
-run end-to-end locally to confirm the zip's layout is correct, but —
-same disclosed limitation as every other piece of this runbook — **it
-has not yet been invoked against a real deployed RDS instance**,
-because nothing in this repo could reach one until this Lambda
-existed. Run it for real before trusting this section blindly.
+This has been built and typechecks. It has now been invoked once for
+real: the first attempt surfaced the RDS Proxy issue above (fixed by
+connecting directly to RDS instead), and — while fixing that — also
+surfaced that Directus's and Medusa's own RDS Proxy connections were
+never actually wired up correctly either (their stored-password
+secrets were never registered with the proxy's `auth` config at all,
+a pre-existing gap this uncovered rather than caused). A second real
+invocation, after both fixes land, hasn't happened yet as of this
+writing — treat this section as "should work now," not "confirmed."
 
 Two other options were considered and are documented here only as
 alternatives, not built:
@@ -157,12 +171,13 @@ alternatives, not built:
 1. **SSM port-forwarding through a throwaway instance** — add
    `ssmmessages`/`ec2messages`/`ssm` interface endpoints, launch a
    temporary EC2/Fargate-with-SSM-agent instance, tunnel local `5432`
-   to the RDS Proxy endpoint, run migrations from your laptop. More
-   moving parts than a Lambda for the same result.
+   to RDS's own endpoint (not RDS Proxy — see above), run migrations
+   from your laptop. More moving parts than a Lambda for the same
+   result.
 2. **A one-off ECS Fargate task** running `node-pg-migrate` instead of
-   a long-lived server, via `aws ecs run-task`. Viable, but the Lambda
-   above reuses `lambda_db_sg_id` and the existing `lambda-service`
-   module unchanged, so it needed no new security-group wiring.
+   a long-lived server, via `aws ecs run-task`. Viable, but would have
+   needed the same direct-to-RDS security-group wiring the Lambda
+   above ended up needing anyway.
 
 ---
 

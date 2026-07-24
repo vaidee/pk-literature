@@ -1,8 +1,29 @@
 # RDS Proxy connection pooling — fronts the single RDS instance so
 # Lambda's high connection churn doesn't exhaust Postgres's own
-# connection limit. Clients authenticate with IAM tokens
-# (require_iam_auth), not the stored master password — that password is
-# only used by the proxy itself to open its pooled backend connections.
+# connection limit.
+#
+# Each `auth` block registers one Secrets Manager secret the proxy will
+# accept client connections for — it's not just "which secret the proxy
+# uses for its own backend connection" (that part is real too, but any
+# registered secret also becomes a valid *client*-facing credential).
+# The master secret's block has iam_auth governed by
+# var.require_iam_auth (true in every real environment) — since RDS
+# doesn't support IAM database authentication for the master user at
+# all, iam_auth = REQUIRED on that entry means the master user can
+# never connect through this proxy by design, password or IAM; anything
+# that genuinely needs the master (migration-runner) connects directly
+# to RDS instead, bypassing the proxy entirely.
+#
+# var.additional_auth_secret_arns registers extra secrets with
+# iam_auth = DISABLED unconditionally — Directus/Medusa's own DB-role
+# passwords (directus_app/medusa_app), whose Postgres clients (Knex)
+# have no dynamic IAM token refresh support, so they connect with a
+# stored password instead (infrastructure/secrets.md's documented
+# exception). Without an entry here, the proxy has no way to validate
+# their password at all — confirmed by a real "IAM authentication
+# failed" error from a stored-password connection, which is what
+# uncovered that this was never wired up despite being the documented
+# intent everywhere else in this codebase.
 
 data "aws_iam_policy_document" "rds_proxy_assume_role" {
   statement {
@@ -25,7 +46,7 @@ data "aws_iam_policy_document" "rds_proxy_secrets" {
   statement {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [var.rds_master_secret_arn]
+    resources = concat([var.rds_master_secret_arn], var.additional_auth_secret_arns)
   }
 }
 
@@ -47,6 +68,15 @@ resource "aws_db_proxy" "this" {
     auth_scheme = "SECRETS"
     iam_auth    = var.require_iam_auth ? "REQUIRED" : "DISABLED"
     secret_arn  = var.rds_master_secret_arn
+  }
+
+  dynamic "auth" {
+    for_each = var.additional_auth_secret_arns
+    content {
+      auth_scheme = "SECRETS"
+      iam_auth    = "DISABLED"
+      secret_arn  = auth.value
+    }
   }
 
   tags = {
