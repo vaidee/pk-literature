@@ -38,6 +38,18 @@ for service in "${MIGRATION_SERVICES[@]}"; do
   cp -r "$src" "$STAGING_DIR/migrations/$service"
 done
 
+# src/index.ts reads this to verify RDS's own TLS certificate — RDS's
+# cert chains to Amazon's RDS-specific CA hierarchy, not a publicly
+# trusted root, so Node's default trust store rejects it
+# ("self-signed certificate in certificate chain") without this.
+# Downloaded here (build time, CI has internet access) rather than
+# fetched at runtime (this Lambda's VPC has none) or embedded as a
+# literal in source (AWS rotates/adds intermediates within this
+# bundle over time; re-downloading on every package keeps it current
+# without a manual update step).
+echo "==> Downloading RDS CA bundle"
+curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o "$STAGING_DIR/rds-ca-bundle.pem"
+
 echo "==> Zipping"
 rm -f "$ZIP_PATH"
 (cd "$STAGING_DIR" && zip -rqy "$ZIP_PATH" . -x "*.git*")

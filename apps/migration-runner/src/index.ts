@@ -1,6 +1,19 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import runner from "node-pg-migrate";
 import { resolveMasterCredential } from "./resolve-master-credential";
+
+// RDS's own certificate (unlike RDS Proxy's, which chains to a
+// publicly-trusted root) is issued by Amazon's RDS-specific CA
+// hierarchy, which isn't in Node's default trusted root bundle —
+// confirmed by a real "self-signed certificate in certificate chain"
+// error the first time this connected directly to RDS instead of
+// through the proxy. scripts/package-lambda.sh downloads AWS's
+// published RDS CA bundle into the zip root at build time (CI has
+// internet access; this Lambda's own VPC-isolated runtime doesn't),
+// same two-levels-up-from-dist/src path reasoning as the migrations
+// directories below.
+const RDS_CA_BUNDLE = fs.readFileSync(path.join(__dirname, "..", "..", "rds-ca-bundle.pem"), "utf8");
 
 interface MigrationRunnerEvent {
   // "down" exists for symmetry with each service's own migrate:down
@@ -44,11 +57,11 @@ export async function handler(event: MigrationRunnerEvent = {}): Promise<Service
     database: requireEnv("PGDATABASE"),
     user: username,
     password,
-    // RDS Proxy requires TLS. Unlike apps/api-catalog's
-    // database.module.ts, there's no local-dev/docker-compose path
-    // here to accommodate — this Lambda only ever runs against the
-    // real deployed RDS Proxy, so verification is unconditional.
-    ssl: { rejectUnauthorized: true },
+    // Verification is unconditional (no local-dev/docker-compose path
+    // to accommodate, unlike apps/api-catalog's database.module.ts) —
+    // `ca` is what makes that verification actually succeed against
+    // RDS's own certificate; see RDS_CA_BUNDLE's comment above.
+    ssl: { rejectUnauthorized: true, ca: RDS_CA_BUNDLE },
   };
 
   // down runs in reverse so each service's own foreign-key/role
