@@ -93,7 +93,21 @@ resource "aws_cloudfront_distribution" "this" {
 
     forwarded_values {
       query_string = true
-      headers      = ["Accept", "Host"]
+      # NOT "Host" — this origin is signed via Origin Access Control
+      # (OAC), and CloudFront computes that SigV4 signature over the
+      # request it actually sends, including whatever Host header
+      # forwarding puts there. Forwarding the viewer's Host
+      # (puthagakadai.com) instead of leaving CloudFront to send the
+      # Lambda Function URL's own host makes the signature the Function
+      # URL service validates against not match what it expects,
+      # producing a 403 AccessDeniedException straight from the
+      # Function URL — confirmed via a real `curl -v` showing exactly
+      # that error, with every other piece of the OAC/IAM chain
+      # (resource policy, SourceArn, AuthType, origin domain) verified
+      # correct via the AWS CLI first. Nothing in apps/web's code reads
+      # the incoming Host header, so dropping it is a no-op for the app
+      # itself.
+      headers = ["Accept"]
       cookies {
         forward = "all"
       }
