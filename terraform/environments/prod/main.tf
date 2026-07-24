@@ -70,7 +70,19 @@ module "vpc_endpoints" {
   # modules/vpc-endpoints' header comment.
   create_endpoints                   = false
   existing_interface_endpoint_sg_ids = var.existing_interface_endpoint_sg_ids
-  consumer_security_group_ids        = [module.security_groups.lambda_db_sg_id, module.security_groups.ecs_directus_sg_id]
+  # ecs_medusa_sg was missing here — Medusa's tasks sit in the
+  # private-nat tier (medusa.tf), but the reused endpoints' private DNS
+  # still redirects secretsmanager.<region>.amazonaws.com to the
+  # endpoint ENI for every resource in the VPC regardless of subnet, so
+  # NAT egress doesn't help: without an ingress rule on the endpoint's
+  # security group, GetSecretValue calls time out
+  # ("ResourceInitializationError: ... context deadline exceeded")
+  # instead of ever reaching the internet.
+  consumer_security_group_ids = [
+    module.security_groups.lambda_db_sg_id,
+    module.security_groups.ecs_directus_sg_id,
+    module.security_groups.ecs_medusa_sg_id,
+  ]
 }
 
 module "secrets_manager" {
