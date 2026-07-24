@@ -35,6 +35,16 @@ own dedicated security group (`migration_runner`,
 `terraform/modules/security-groups`) with direct ingress on RDS's own
 security group, rather than reusing another service's.
 
+Connecting directly to RDS also means verifying RDS's own TLS
+certificate, not RDS Proxy's — RDS's cert chains to Amazon's
+RDS-specific CA hierarchy, which isn't in Node's default trusted root
+bundle (confirmed by a real `self-signed certificate in certificate
+chain` error the first time this ran after the RDS Proxy fix above).
+`scripts/package-lambda.sh` downloads AWS's published RDS CA bundle at
+build time and `src/index.ts` passes it as `ssl.ca` — verification
+stays on (`rejectUnauthorized: true`), it's just now checking against
+the right root.
+
 ## Not a normal service
 
 - **No HTTP trigger, no API Gateway route.** `terraform/environments/<env>/migration-runner.tf`
@@ -65,18 +75,20 @@ security group, rather than reusing another service's.
 service's `package-lambda.sh` — also copies each of the 5 services'
 `migrations/` directories into the deployment package (they live in
 sibling app directories this Lambda would otherwise never see at
-runtime), before zipping. Must be re-run whenever this app's code
-changes *or* whenever any of those 5 services gains a new migration
-file.
+runtime) and downloads AWS's RDS CA bundle (see above), before
+zipping. Must be re-run whenever this app's code changes, whenever any
+of those 5 services gains a new migration file, or periodically to
+pick up CA bundle updates (it's re-downloaded fresh on every package,
+not pinned to a checked-in copy).
 
 ## Known limitation
 
 This has been built and typechecks, and the packaging script has been
 run end-to-end locally to confirm the zip's layout (`dist/src/index.js`
-+ `migrations/<service>/*.sql` at the zip root) is correct. It has now
-been invoked once for real — that attempt failed on the RDS Proxy
-issue described above (since fixed by connecting directly to RDS
-instead). A second real invocation, after that fix lands, hasn't
-happened yet as of this writing. Same disclosed-limitation pattern as
-`apps/directus/README.md`'s and `apps/medusa/README.md`'s "Known
-issue" sections.
++ `migrations/<service>/*.sql` + `rds-ca-bundle.pem` at the zip root)
+is correct. It has now been invoked twice for real: the first attempt
+failed on the RDS Proxy issue described above, the second (after that
+fix) failed on the TLS/CA issue also described above. A third real
+invocation, after both fixes land, hasn't happened yet as of this
+writing. Same disclosed-limitation pattern as `apps/directus/README.md`'s
+and `apps/medusa/README.md`'s "Known issue" sections.
