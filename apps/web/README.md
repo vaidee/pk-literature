@@ -98,23 +98,22 @@ in one pnpm workspace needing different React majors.
 script or by Terraform:
 
 - **Static assets** (`.open-next/assets`, served at `/_next/static/*`
-  from `terraform/modules/opennext`'s S3 bucket) need an `aws s3 sync`
-  with correct per-file `Content-Type`/`Cache-Control` as a CI/deploy
-  step — Terraform doesn't model bulk object uploads well, same
-  reasoning as every other environment-specific manual/CI step in
-  `runbooks/deploy.md`.
+  from `terraform/modules/opennext`'s S3 bucket) and the **CloudFront
+  invalidation** after every deploy are both handled by
+  `.github/workflows/terraform-apply.yml`, right after `terraform
+  apply` — an `aws s3 sync` (content-hashed `_next/static/*` gets a
+  year-long immutable cache; everything else revalidates on every
+  request) followed by `aws cloudfront create-invalidation
+  --paths "/*"`. Terraform doesn't model bulk object uploads well, so
+  this lives in CI rather than in either module.
 - **`NEXT_PUBLIC_*` env vars** (`NEXT_PUBLIC_API_BASE_URL`,
   `NEXT_PUBLIC_CDN_HOST`, `NEXT_PUBLIC_RAZORPAY_KEY_ID`) are inlined
   into the client JS bundle at `next build` time by Next.js itself —
   they have to be exported as shell env vars in whatever CI step runs
   `package-opennext.sh`, setting them as this Lambda's runtime
   environment (which `terraform/environments/*/web.tf` does for the
-  plain, server-only `API_BASE_URL`) does nothing for them.
-- **CloudFront invalidation** after every deploy (new server Lambda
-  version means the "no genuinely static content" default behavior is
-  moot, but a stale S3 sync error could otherwise leave old
-  `/_next/static/*` files serving alongside a new server build's HTML
-  that expects the new ones).
+  plain, server-only `API_BASE_URL`) does nothing for them. Still an
+  open gap — `terraform-apply.yml`'s build step doesn't set these yet.
 - The image-optimization Lambda is deployed with `architectures =
   ["arm64"]` — `@opennextjs/aws` installs `sharp`'s arm64 prebuilt
   binary for that function specifically, confirmed by actually running
