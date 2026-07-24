@@ -24,6 +24,17 @@ Lambda environment variable, per `infrastructure/secrets.md`. It has
 to be the master user: the app DB roles are what these migrations
 *create*, so nothing else can run them from a cold start.
 
+Connects **directly to RDS** (`PGHOST` = `module.rds.db_address`), not
+through RDS Proxy — RDS doesn't support IAM database authentication
+for the master user at all, and the proxy's master auth entry
+deliberately requires IAM auth, so no master connection can ever
+succeed through the proxy (`terraform/modules/rds-proxy`'s header
+comment; confirmed by a real `IAM authentication failed for the role
+pk_literature_admin` error from the first live invocation). It has its
+own dedicated security group (`migration_runner`,
+`terraform/modules/security-groups`) with direct ingress on RDS's own
+security group, rather than reusing another service's.
+
 ## Not a normal service
 
 - **No HTTP trigger, no API Gateway route.** `terraform/environments/<env>/migration-runner.tf`
@@ -62,8 +73,10 @@ file.
 
 This has been built and typechecks, and the packaging script has been
 run end-to-end locally to confirm the zip's layout (`dist/src/index.js`
-+ `migrations/<service>/*.sql` at the zip root) is correct — but it has
-not yet been invoked against a real deployed RDS instance, because
-nothing in this repo could reach one until this Lambda existed. Same
-disclosed-limitation pattern as `apps/directus/README.md`'s and
-`apps/medusa/README.md`'s "Known issue" sections.
++ `migrations/<service>/*.sql` at the zip root) is correct. It has now
+been invoked once for real — that attempt failed on the RDS Proxy
+issue described above (since fixed by connecting directly to RDS
+instead). A second real invocation, after that fix lands, hasn't
+happened yet as of this writing. Same disclosed-limitation pattern as
+`apps/directus/README.md`'s and `apps/medusa/README.md`'s "Known
+issue" sections.

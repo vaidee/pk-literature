@@ -29,3 +29,7 @@ output "ecs_directus_sg_id" {
 output "ecs_medusa_sg_id" {
   value = aws_security_group.ecs_medusa.id
 }
+
+output "migration_runner_sg_id" {
+  value = aws_security_group.migration_runner.id
+}

@@ -95,6 +95,11 @@ module "vpc_endpoints" {
     module.security_groups.lambda_egress_sg_id,
     module.security_groups.ecs_directus_sg_id,
     module.security_groups.ecs_medusa_sg_id,
+    # migration-runner fetches the RDS master credential from Secrets
+    # Manager too, even though it bypasses RDS Proxy entirely for the
+    # actual DB connection (security-groups module's migration_runner
+    # SG header comment).
+    module.security_groups.migration_runner_sg_id,
   ]
 }
 
@@ -130,6 +135,15 @@ module "rds_proxy" {
   db_instance_id              = module.rds.db_instance_id
   rds_master_secret_arn       = module.secrets_manager.rds_master_secret_arn
   require_iam_auth            = true
+  # Directus/Medusa connect with their own stored password (Knex has no
+  # dynamic IAM token refresh) — without registering their secrets
+  # here, the proxy has no auth entry for directus_app/medusa_app at
+  # all and rejects them, confirmed by a real "IAM authentication
+  # failed" error surfacing this gap.
+  additional_auth_secret_arns = [
+    module.secrets_manager.directus_db_password_secret_arn,
+    module.secrets_manager.medusa_db_password_secret_arn,
+  ]
 }
 
 module "s3" {
